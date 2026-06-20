@@ -112,93 +112,50 @@ mode = st.radio(
 st.divider()
 
 # ===========================================================================
-# 主區:左 = persona+chat,右 = 原文+CCD
-#   先畫右欄(原文 text area),左欄的「建立」按鈕才能讀到當前全文。
+# 順流式:貼上文章 → 建立 Persona →(下方)左 對話、右 CCD
 # ===========================================================================
-left, right = st.columns([3, 2], gap="large")
 
-# --- 右欄:原文 + CCD 歸類檔 ----------------------------------------------
-with right:
-    st.subheader("文章原文 (post)")
-    # 左欄會用到的選擇結果先在這裡準備:用 session 暫存目前選到的 post
-    cur_post = st.session_state.get("_cur_post")
-    if cur_post is None:
-        cur_post = core.POSTS[16]  # 預設 #17 Habit Change(有全文)
-    # 原文 text area:key 綁 post id,換 post 自動換內容/記住各自貼上的全文
-    post_text = st.text_area(
-        "Reddit 全文(找不到時請貼上)",
-        value=core.load_post_text(cur_post["id"]),
-        key=f"posttext_{cur_post['id']}",
-        height=260,
-        label_visibility="collapsed",
-    )
-    st.caption(f"#{cur_post['id']} · {cur_post['title']}")
-    st.caption(f"🔗 {cur_post['url']}")
+# --- 貼上文章(整列寬)----------------------------------------------------
+st.subheader("貼上文章 (post)")
+post_text = st.text_area(
+    "貼上文章",
+    key="post_input",
+    height=200,
+    placeholder="從任何地方把一段貼文 / 自述貼進來…",
+    label_visibility="collapsed",
+)
 
-    st.subheader("CCD 歸類檔 (8 段)")
-    if st.session_state.persona_ready and st.session_state.basis == "CCD":
-        st.caption(f"📄 {st.session_state.ccd_path}")
-        st.text(st.session_state.ccd)
-    elif st.session_state.basis == "Post":
-        st.info("Direct 模式不經過 CCD,因此沒有 CCD 歸類檔。")
+# 模式變了 → persona 過期,提示重建
+if st.session_state.persona_ready and st.session_state.get("built_mode") != mode:
+    invalidate_persona()
+
+if st.button("建立 / 重建 Persona", type="primary"):
+    if not post_text.strip():
+        st.warning("請先貼上文章。")
     else:
-        st.caption("建立 persona(CCD 模式)後,這裡會顯示 8 段 CCD 歸類檔。")
-
-# --- 左欄:選 post + 建立 persona + 對話 ----------------------------------
-with left:
-    st.subheader("Persona + Chatbox")
-
-    clusters = core.load_clusters()
-    cc, pc = st.columns(2)
-    with cc:
-        cluster_name = st.selectbox("Cluster(分群篩選)", list(clusters.keys()),
-                                    index=list(clusters.keys()).index(cur_post["category"]))
-    with pc:
-        posts_in = clusters[cluster_name]
-        ids = [p["id"] for p in posts_in]
-        default_idx = ids.index(cur_post["id"]) if cur_post["id"] in ids else 0
-        chosen = st.selectbox("Post", posts_in, index=default_idx,
-                              format_func=lambda p: f"{'⚠️ ' if p['flagged'] else ''}#{p['id']} · {p['title']}")
-
-    # 換 post → 更新右欄原文 + 讓 persona 過期
-    if chosen["id"] != cur_post["id"]:
-        st.session_state["_cur_post"] = chosen
-        invalidate_persona()
+        with st.spinner("建立 CCD…" if mode == core.MODE_CCD else "建立 persona…"):
+            res = core.build_persona(mode, post_text)
+        st.session_state.persona_ready = True
+        st.session_state.built_mode = mode
+        st.session_state.basis = res["basis"]
+        st.session_state.ccd = res["ccd"]
+        st.session_state.ccd_path = res["ccd_path"]
+        st.session_state.messages = [{"role": "system", "content": res["system"]}]
+        st.session_state.chat_history = []
         st.rerun()
 
-    st.caption(f"摘要:{chosen['summary']}")
-    if chosen["flagged"]:
-        st.error("此 post 標記為危機內容(含自殺意念),依規則排除於 persona 使用。")
+if st.session_state.persona_ready:
+    st.success(f"Persona 已就緒 · 模式:{mode} · 生成依據:{st.session_state.basis}")
+else:
+    st.info("貼上文章、選好模式後,按「建立 / 重建 Persona」。")
 
-    # 模式或 post 變了 → persona 過期
-    sig = (chosen["id"], mode)
-    if st.session_state.persona_ready and st.session_state.persona_sig != sig:
-        invalidate_persona()
+st.divider()
 
-    build = st.button("建立 / 重建 Persona", type="primary", disabled=chosen["flagged"])
-    if build:
-        if not post_text.strip():
-            st.warning("請先在右側提供 post 全文。")
-        else:
-            with st.spinner("建立 CCD…" if mode == core.MODE_CCD else "建立 persona…"):
-                res = core.build_persona(mode, post_text)
-            st.session_state.persona_ready = True
-            st.session_state.persona_sig = sig
-            st.session_state.basis = res["basis"]
-            st.session_state.ccd = res["ccd"]
-            st.session_state.ccd_path = res["ccd_path"]
-            st.session_state.messages = [{"role": "system", "content": res["system"]}]
-            st.session_state.chat_history = []
-            st.rerun()
+# --- 下方:左 對話 / 右 CCD ------------------------------------------------
+left, right = st.columns([3, 2], gap="large")
 
-    # persona 狀態列
-    if st.session_state.persona_ready:
-        st.success(f"Persona 已就緒 · 模式:{mode} · 生成依據:{st.session_state.basis}")
-    else:
-        st.info("選好 post 與模式後,按「建立 / 重建 Persona」。")
-
-    # 對話區
-    st.markdown("**對話測試**")
+with left:
+    st.subheader("對話測試")
     for role, msg in st.session_state.chat_history:
         with st.chat_message("user" if role == "you" else "assistant"):
             st.write(msg)
@@ -214,3 +171,13 @@ with left:
         st.session_state.chat_history.append(("you", user_input))
         st.session_state.chat_history.append(("persona", reply))
         st.rerun()
+
+with right:
+    st.subheader("CCD 歸類檔 (8 段)")
+    if st.session_state.persona_ready and st.session_state.basis == "CCD":
+        st.caption(f"📄 {st.session_state.ccd_path}")
+        st.text(st.session_state.ccd)
+    elif st.session_state.basis == "Post":
+        st.info("Direct 模式不經過 CCD,因此沒有 CCD 歸類檔。")
+    else:
+        st.caption("建立 persona(CCD 模式)後,這裡會顯示 8 段 CCD 歸類檔。")
