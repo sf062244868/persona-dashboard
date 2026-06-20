@@ -1,0 +1,7 @@
+# UI 主題(對齊 chatbot_pipeline_slide.html 的配色:teal 主色 + 淺灰底)
+[theme]
+primaryColor = "#0f766e"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f6f8"
+textColor = "#1f2933"
+font = "sans serif"
