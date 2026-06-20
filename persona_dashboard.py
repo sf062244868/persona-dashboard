@@ -2,16 +2,18 @@
 persona_dashboard.py — Persona Generation Interface
 ===================================================
 
-順流式版面 + 投影片風格,並支援 A·B 並排對照、回覆計時、對話匯出。
+Top-down layout + slide styling, with A·B side-by-side comparison,
+per-reply timing, and chat export.
 
-  頂部   兩種方法 pipeline(卡片,建完收合)+ 使用教學 + 模式(A / B / A·B 並排)
-  中段   貼上文章 / 載入範例 → 建立 → 暫存 / 載入 / 清空 / 匯出 / 看原文
-  下方   對話測試(並排模式時兩欄)+ CCD 歸類檔
+  Top     Two method pipelines (cards, collapse after build) + tutorial + mode (A / B / A·B)
+  Middle  Paste post / load sample -> Build -> Save / Load / Clear / Export / view source
+  Bottom  Chat test (two columns in side-by-side mode) + CCD profile
 
-後端在 persona_core.py。cluster/全文之後接你們的研究方法只改 persona_core。
+Backend lives in persona_core.py. To plug in your own clustering / post source later,
+only change load_clusters() / load_post_text() there.
 
-執行:  streamlit run persona_dashboard.py
-需求:  .env(本地)或 Streamlit secrets(雲端)內含 OPENAI_API_KEY
+Run:    streamlit run persona_dashboard.py
+Needs:  OPENAI_API_KEY in .env (local) or Streamlit secrets (cloud)
 """
 
 import os
@@ -23,7 +25,7 @@ st.set_page_config(page_title="Persona Generation Interface", layout="wide")
 
 
 def _secret(key, default=None):
-    """先讀 Streamlit secrets(雲端),再讀環境變數(本地 .env)。"""
+    """Read Streamlit secrets first (cloud), then environment variables (local .env)."""
     try:
         if key in st.secrets:
             return st.secrets[key]
@@ -44,13 +46,13 @@ def _check_password() -> bool:
     if st.session_state.get("auth_ok"):
         return True
     st.title("Persona Generation Interface")
-    pw = st.text_input("請輸入存取密碼", type="password")
+    pw = st.text_input("Enter access password", type="password")
     if pw:
         if pw == str(app_pw):
             st.session_state.auth_ok = True
             st.rerun()
         else:
-            st.error("密碼錯誤。")
+            st.error("Wrong password.")
     st.stop()
 
 
@@ -58,17 +60,17 @@ _check_password()
 
 import persona_core as core  # noqa: E402
 
-# 三種檢視模式 → 要建立的 run keys('A'=Method A/CCD,'B'=Method B/Direct)
-VIEW_A = "Method A(Post-CCD)"
-VIEW_B = "Method B(Direct)"
-VIEW_AB = "A·B 並排對照"
+# Three view modes -> run keys to build ('A' = Method A/CCD, 'B' = Method B/Direct)
+VIEW_A = "Method A (Post-CCD)"
+VIEW_B = "Method B (Direct)"
+VIEW_AB = "A·B Side-by-side"
 VIEW_KEYS = {VIEW_A: ["A"], VIEW_B: ["B"], VIEW_AB: ["A", "B"]}
 KEY_MODE = {"A": core.MODE_CCD, "B": core.MODE_DIRECT}
-KEY_LABEL = {"A": "Method A · 經 CCD", "B": "Method B · 直接 post"}
+KEY_LABEL = {"A": "Method A · via CCD", "B": "Method B · direct post"}
 
 
 # ===========================================================================
-# 樣式(對齊投影片配色)
+# Styling (matches the slide palette)
 # ===========================================================================
 st.markdown("""
 <style>
@@ -98,21 +100,21 @@ PIPELINE_HTML = """
   <div class="pp-panel a">
     <div class="pp-title a"><span class="tag">A</span>Post-CCD-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>原始貼文</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node ccd"><b>CCD</b><small>8 段概念化</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node persona"><b>Persona</b><small>以 CCD 建</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node chat"><b>Chatbox</b><small>對話</small></div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node ccd"><b>CCD</b><small>8-section</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node persona"><b>Persona</b><small>from CCD</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node chat"><b>Chatbox</b><small>chat</small></div>
     </div>
-    <span class="pp-cap">先把貼文轉成 8 段 CCD,再以 CCD 建立 persona。</span>
+    <span class="pp-cap">Turn the post into an 8-section CCD, then build the persona from the CCD.</span>
   </div>
   <div class="pp-panel b">
     <div class="pp-title b"><span class="tag">B</span>Direct Post-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>原始貼文</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node persona"><b>Persona</b><small>直接用 post</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node chat"><b>Chatbox</b><small>對話</small></div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node persona"><b>Persona</b><small>from post</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node chat"><b>Chatbox</b><small>chat</small></div>
     </div>
-    <span class="pp-cap">跳過 CCD,直接以原始 post 建立 persona。</span>
+    <span class="pp-cap">Skip the CCD; build the persona directly from the raw post.</span>
   </div>
 </div>
 """
@@ -122,7 +124,7 @@ PIPELINE_HTML = """
 # session state
 # ===========================================================================
 _defaults = {
-    "runs": {},            # {'A': run, 'B': run};run = mode/system/basis/ccd/ccd_path/build_secs/messages/chat_history
+    "runs": {},            # {'A': run, 'B': run}; run = mode/system/basis/ccd/ccd_path/build_secs/messages/chat_history
     "built_post": "",
     "built_view": None,
     "saved": [],
@@ -151,7 +153,6 @@ def save_persona():
     if not name:
         excerpt = (st.session_state.built_post or "").strip().replace("\n", " ")[:20]
         name = f"{st.session_state.built_view} · {excerpt}…"
-    # 深拷貝 runs(messages / chat_history 是 list)
     snap_runs = {}
     for kk, run in st.session_state.runs.items():
         snap_runs[kk] = {**run, "messages": list(run["messages"]), "chat_history": list(run["chat_history"])}
@@ -179,17 +180,17 @@ def load_persona():
 
 def build_export_text() -> str:
     lines = ["Persona Chat Export",
-             f"時間:{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-             f"檢視模式:{st.session_state.built_view}",
+             f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+             f"View: {st.session_state.built_view}",
              "",
-             "===== 原文 (post) =====",
-             st.session_state.built_post or "(無)",
+             "===== Source post =====",
+             st.session_state.built_post or "(none)",
              ""]
     for kk, run in st.session_state.runs.items():
-        lines.append(f"===== {KEY_LABEL[kk]}(建立 {run['build_secs']:.1f}s) =====")
+        lines.append(f"===== {KEY_LABEL[kk]} (build {run['build_secs']:.1f}s) =====")
         if run.get("ccd"):
-            lines += ["[CCD 歸類檔]", run["ccd"], ""]
-        lines.append("[對話]")
+            lines += ["[CCD profile]", run["ccd"], ""]
+        lines.append("[Chat]")
         for role, text, lat in run["chat_history"]:
             who = "You" if role == "you" else "Persona"
             tag = f" (⏱ {lat:.1f}s)" if lat else ""
@@ -207,70 +208,70 @@ def render_transcript(run):
 
 
 # ===========================================================================
-# 頂部:標題 + pipeline + 教學 + 模式
+# Top: title + pipeline + tutorial + mode
 # ===========================================================================
 st.title("Persona Generation Interface")
 
-with st.expander("方法 Pipeline(A / B 流程)", expanded=not has_persona()):
+with st.expander("Method Pipeline (A / B flow)", expanded=not has_persona()):
     st.markdown(PIPELINE_HTML, unsafe_allow_html=True)
 
-with st.expander("📖 使用教學(第一次先看這裡)", expanded=not has_persona()):
+with st.expander("📖 How to use (read this first)", expanded=not has_persona()):
     st.markdown("""
-**這個工具在做什麼**:把一段自述 / 貼文變成「可對話的 persona」,並比較兩種生成方式的差別。
+**What this tool does**: turns a post / self-description into a *chattable persona*, and lets you compare two ways of generating it.
 
-**操作步驟**
-1. 選 **模式**:**Method A**(先轉成 8 段 CCD 再建)/ **Method B**(直接用原文建)/ **A·B 並排對照**(同時建兩個、左右對照)。
-2. **貼上文章**,或按 **「載入範例貼文」**。
-3. 按 **「建立 / 重建 Persona」**。
-4. 在下方 **對話測試** 跟 persona 聊天;每則回覆會顯示 **⏱ 花費時間**。並排模式下,同一句話會同時送給 A 和 B。
-5. 想保留 → **「💾 暫存」**;想存證據 → **「⬇️ 匯出對話 (.txt)」**。
+**Steps**
+1. Pick a **mode**: **Method A** (turn it into an 8-section CCD first) / **Method B** (build directly from the raw text) / **A·B Side-by-side** (build both and compare).
+2. **Paste a post**, or click **"Load sample post"**.
+3. Click **"Build / Rebuild Persona"**.
+4. Chat with the persona in **Chat test** below; each reply shows its **⏱ response time**. In side-by-side mode, the same message goes to both A and B.
+5. Want to keep it → **"💾 Save"**; want a record → **"⬇️ Export chat (.txt)"**.
 """)
 
 view = st.radio(
-    "模式",
+    "Mode",
     [VIEW_A, VIEW_B, VIEW_AB],
     horizontal=True,
     key="view_radio",
-    help="A:先產 CCD 再建。B:直接用 post。A·B:同時建兩個並排對照。",
+    help="A: build a CCD first, then the persona. B: build directly from the post. A·B: build both and compare.",
 )
 
 st.divider()
 
 # ===========================================================================
-# 中段:貼上文章 → 建立 → 暫存 / 載入 / 清空 / 匯出
+# Middle: paste post -> build -> save / load / clear / export
 # ===========================================================================
-st.subheader("貼上文章 (post)")
+st.subheader("Paste a post")
 post_text = st.text_area(
-    "貼上文章",
+    "Paste a post",
     key="post_input",
     height=180,
-    placeholder="從任何地方把一段貼文 / 自述貼進來…",
+    placeholder="Paste any post / self-description here…",
     label_visibility="collapsed",
 )
 
 b1, b2 = st.columns([1, 1])
 with b1:
-    st.button("📄 載入範例貼文", on_click=load_sample, use_container_width=True)
+    st.button("📄 Load sample post", on_click=load_sample, use_container_width=True)
 with b2:
-    build = st.button("✨ 建立 / 重建 Persona", type="primary", use_container_width=True)
+    build = st.button("✨ Build / Rebuild Persona", type="primary", use_container_width=True)
 
-# 模式變了 → 目前 persona 過期
+# Mode changed -> current persona is stale
 if has_persona() and st.session_state.built_view != view:
     st.session_state.runs = {}
 
 if build:
     if not post_text.strip():
-        st.warning("請先貼上文章,或按「載入範例貼文」。")
+        st.warning("Paste a post first, or click \"Load sample post\".")
     else:
         runs = {}
         ok = True
         for kk in VIEW_KEYS[view]:
             mode = KEY_MODE[kk]
             try:
-                with st.spinner(f"建立 {KEY_LABEL[kk]}…"):
+                with st.spinner(f"Building {KEY_LABEL[kk]}…"):
                     res = core.build_persona(mode, post_text)
             except Exception as e:
-                st.error(f"建立 {KEY_LABEL[kk]} 失敗:{type(e).__name__} — 請稍後再試。")
+                st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__} — please try again.")
                 ok = False
                 break
             runs[kk] = {
@@ -287,54 +288,54 @@ if build:
 
 if has_persona():
     secs = " · ".join(f"{KEY_LABEL[kk]} {run['build_secs']:.1f}s" for kk, run in st.session_state.runs.items())
-    st.success(f"Persona 已就緒 · {st.session_state.built_view} · 建立耗時:{secs}")
+    st.success(f"Persona ready · {st.session_state.built_view} · build time: {secs}")
 else:
-    st.info("貼上文章、選好模式後,按「建立 / 重建 Persona」。")
+    st.info("Paste a post, pick a mode, then click \"Build / Rebuild Persona\".")
 
-# --- 工具列:暫存 / 清空 / 匯出 / 看原文 ----------------------------------
+# --- toolbar: save / clear / export / view source ------------------------
 if has_persona():
     t1, t2, t3 = st.columns([2, 1, 1])
     with t1:
-        st.text_input("暫存名稱", key="save_name",
-                      placeholder="幫這個 persona 取名(可留空自動命名)",
+        st.text_input("Save name", key="save_name",
+                      placeholder="Name this persona (leave blank to auto-name)",
                       label_visibility="collapsed")
     with t2:
-        st.button("💾 暫存", on_click=save_persona, use_container_width=True)
+        st.button("💾 Save", on_click=save_persona, use_container_width=True)
     with t3:
-        st.button("🧹 清空對話", on_click=clear_chat, use_container_width=True)
+        st.button("🧹 Clear chat", on_click=clear_chat, use_container_width=True)
 
     st.download_button(
-        "⬇️ 匯出對話 (.txt)",
+        "⬇️ Export chat (.txt)",
         data=build_export_text(),
         file_name=f"persona_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
         mime="text/plain",
         use_container_width=True,
     )
-    with st.expander("建立依據的原文 (post)"):
+    with st.expander("Source post used"):
         st.text(st.session_state.built_post)
 
 if st.session_state.saved:
     labels = [s["label"] for s in st.session_state.saved]
     l1, l2 = st.columns([3, 1])
     with l1:
-        st.selectbox("已暫存的 Persona", range(len(labels)),
+        st.selectbox("Saved personas", range(len(labels)),
                      format_func=lambda i: f"{labels[i]}  ({st.session_state.saved[i]['view']})",
                      key="load_idx", label_visibility="collapsed")
     with l2:
-        st.button("📂 載入", on_click=load_persona, use_container_width=True)
-    st.caption(f"已暫存 {len(labels)} 個(本次連線有效,重新整理會清空)。")
+        st.button("📂 Load", on_click=load_persona, use_container_width=True)
+    st.caption(f"{len(labels)} saved (this session only; a refresh clears them).")
 
 st.divider()
 
 # ===========================================================================
-# 下方:對話測試(並排模式兩欄)+ CCD
+# Bottom: chat test (two columns in side-by-side mode) + CCD
 # ===========================================================================
-st.subheader("對話測試")
+st.subheader("Chat test")
 runs = st.session_state.runs
 keys = list(runs.keys())
 
 if not has_persona():
-    st.info("先建立 persona。")
+    st.info("Build a persona first.")
 elif len(keys) == 2:
     c = st.columns(2)
     for col, kk in zip(c, keys):
@@ -345,7 +346,7 @@ else:
     render_transcript(runs[keys[0]])
 
 user_input = st.chat_input(
-    "說點什麼(並排模式會同時送給 A 和 B)…" if has_persona() else "請先建立 persona",
+    "Say something (side-by-side sends to both A and B)…" if has_persona() else "Build a persona first",
     disabled=not has_persona(),
 )
 if user_input:
@@ -355,20 +356,20 @@ if user_input:
             reply, info = core.chat_once(run["messages"])
             lat = info["latency"]
         except Exception as e:
-            reply, lat = f"(發生錯誤:{type(e).__name__},請稍後再試)", None
+            reply, lat = f"(Error: {type(e).__name__}, please try again)", None
         run["messages"].append({"role": "assistant", "content": reply})
         run["chat_history"].append(("you", user_input, None))
         run["chat_history"].append(("persona", reply, lat))
     st.rerun()
 
-# --- CCD 歸類檔 ------------------------------------------------------------
+# --- CCD profile -----------------------------------------------------------
 if has_persona():
     st.divider()
-    st.subheader("CCD 歸類檔 (8 段)")
+    st.subheader("CCD profile (8 sections)")
     a_run = runs.get("A")
     if a_run and a_run.get("ccd"):
         if a_run.get("ccd_path"):
             st.caption(f"📄 {a_run['ccd_path']}")
         st.text(a_run["ccd"])
     else:
-        st.info("目前檢視不含 Method A(CCD),因此沒有 CCD 歸類檔。")
+        st.info("The current view has no Method A (CCD), so there's no CCD profile.")
