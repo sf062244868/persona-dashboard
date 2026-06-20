@@ -10,6 +10,8 @@ load_post_text() 即可,其餘不動。
 """
 
 import os
+import time
+import hashlib
 from pathlib import Path
 
 from openai import OpenAI
@@ -207,8 +209,31 @@ def load_post_text(post_id: int) -> str:
 # LLM
 # ---------------------------------------------------------------------------
 
+# 以 post 內容 hash 為 key 的 CCD 記憶體快取:同一篇 post 重建不重打 API。
+_ccd_cache: dict = {}
+
+
+def _usage(response):
+    u = getattr(response, "usage", None)
+    return {
+        "prompt_tokens": getattr(u, "prompt_tokens", None),
+        "completion_tokens": getattr(u, "completion_tokens", None),
+        "total_tokens": getattr(u, "total_tokens", None),
+    }
+
+
 def generate_ccd(post_text: str):
-    """回傳 (ccd_text, saved_path)。沿用上次的自動編號存檔。"""
+    """回傳 (ccd_text, saved_path, info)。同一篇 post 走快取。
+
+    info = {latency, cached, prompt_tokens, completion_tokens, total_tokens}
+    """
+    key = hashlib.sha256(post_text.strip().encode("utf-8")).hexdigest()
+    if key in _ccd_cache:
+        ccd, path = _ccd_cache[key]
+        return ccd, path, {"latency": 0.0, "cached": True,
+                           "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+
+    t0 = time.perf_counter()
     response = get_client().chat.completions.create(
         model=MODEL,
         max_tokens=2000,
@@ -217,32 +242,45 @@ def generate_ccd(post_text: str):
             {"role": "user", "content": CCD_PROMPT.format(patient_text=post_text)},
         ],
     )
+    latency = time.perf_counter() - t0
     ccd = response.choices[0].message.content
     CCD_DIR.mkdir(exist_ok=True)
     existing = [f for f in os.listdir(CCD_DIR) if f.startswith("single_") and f.endswith("_ccd.txt")]
     out_path = CCD_DIR / f"single_{len(existing) + 1:03d}_ccd.txt"
     out_path.write_text(ccd, encoding="utf-8")
-    return ccd, str(out_path)
+    _ccd_cache[key] = (ccd, str(out_path))
+    info = {"latency": latency, "cached": False, **_usage(response)}
+    return ccd, str(out_path), info
 
 
 def build_persona(mode: str, post_text: str):
     """依模式建立 persona 的 system prompt。
 
     回傳 dict:
-      system   - persona 的 system prompt
-      basis    - "CCD" 或 "Post"(生成依據標籤)
-      ccd      - CCD 全文(僅 CCD 模式,否則 None)
-      ccd_path - CCD 存檔路徑(僅 CCD 模式,否則 None)
+      system     - persona 的 system prompt
+      basis      - "CCD" 或 "Post"(生成依據標籤)
+      ccd        - CCD 全文(僅 CCD 模式,否則 None)
+      ccd_path   - CCD 存檔路徑(僅 CCD 模式,否則 None)
+      build_secs - 建立耗時(秒;CCD 模式才有實質數值,Direct 近 0)
+      info       - 生成的 token / cached 資訊(CCD 模式才有)
     """
     if mode == MODE_CCD:
-        ccd, path = generate_ccd(post_text)
+        ccd, path, info = generate_ccd(post_text)
         return {"system": PERSONA_SYSTEM_PROMPT.format(ccd_text=ccd.strip()),
-                "basis": "CCD", "ccd": ccd, "ccd_path": path}
+                "basis": "CCD", "ccd": ccd, "ccd_path": path,
+                "build_secs": info["latency"], "info": info}
     return {"system": PERSONA_DIRECT_PROMPT.format(post_text=post_text.strip()),
-            "basis": "Post", "ccd": None, "ccd_path": None}
+            "basis": "Post", "ccd": None, "ccd_path": None,
+            "build_secs": 0.0, "info": None}
 
 
-def chat_once(messages: list) -> str:
-    """messages 已含 system prompt 與歷史,回傳這一輪的 persona 回覆。"""
+def chat_once(messages: list):
+    """messages 已含 system prompt 與歷史,回傳 (reply, info)。
+
+    info = {latency, prompt_tokens, completion_tokens, total_tokens}
+    """
+    t0 = time.perf_counter()
     response = get_client().chat.completions.create(model=MODEL, messages=messages)
-    return response.choices[0].message.content
+    latency = time.perf_counter() - t0
+    reply = response.choices[0].message.content
+    return reply, {"latency": latency, **_usage(response)}
