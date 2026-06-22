@@ -1,6 +1,6 @@
 # posts/ — 接口 placeholder
 
-`persona_interface.py` 的 `load_post_text(post_id)` 會先找這裡的 `{id}.txt`。
+`persona_core.py` 的 `load_post_text(post_id)` 會先找這裡的 `{id}.txt`。
 把某篇 post 的全文存成對應檔名，介面選到該 post 時就會自動帶入全文。
 
 範例：

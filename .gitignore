@@ -9,3 +9,7 @@ __pycache__/
 
 # 系統
 .DS_Store
+
+# Felix Phase2 大型產物：embedding/pool 不進 git（>100MB，GitHub 會擋；可由 notebook 重生）
+felix_files/Phase2/pool/
+felix_files/Phase2/downloads/

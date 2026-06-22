@@ -35,7 +35,7 @@ Post Selection  →  Persona Construction  →  Chatbox Interaction
 | `load_clusters()` | Merged_Post_List.md 的 8 個人工 category | 你們之前的研究方法（embedding / 分群結果） |
 | `load_post_text(post_id)` | `posts/{id}.txt` 或上層既有全文 | 20 篇 post 全文 |
 
-只要維持回傳格式，`persona_interface.py` 的 UI 不用改。
+只要維持回傳格式，`persona_dashboard.py` 的 UI 不用改。
 
 ## 安全規則（沿用上次）
 

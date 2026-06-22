@@ -7,7 +7,8 @@
 
 | 檔案 | 說明 |
 |---|---|
-| `persona_interface.py` | 兩方法 Streamlit 介面（會議 Section 1–5） |
+| `persona_dashboard.py` | 兩方法 Streamlit 介面（A·B 並排、計時、token、匯出、prompt 展示） |
+| `persona_core.py` | 共用後端（prompts、post 資料、cluster 接口、CCD 生成、對話），無 UI 依賴 |
 | `pipeline.md` | 兩條 pipeline 的設計與討論文件 |
 | `clusters/` | 接口 placeholder：之後放分群/研究方法結果 |
 | `posts/` | 接口 placeholder：之後放 20 篇 post 全文（`{id}.txt`） |
@@ -17,7 +18,7 @@
 
 ```bash
 cd "2026.06.24"
-streamlit run persona_interface.py
+streamlit run persona_dashboard.py
 ```
 
 需求：`.env` 內含 `OPENAI_API_KEY`（會自動讀本資料夾或上一層的 `.env`）。

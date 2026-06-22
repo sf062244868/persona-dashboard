@@ -1,0 +1,1234 @@
+{
+  "0": {
+    "cluster_id": 0,
+    "topic_label": "Retail Experience",
+    "n_posts": 1245,
+    "top_keywords": [
+      "store",
+      "customer",
+      "customers",
+      "manager",
+      "work",
+      "job",
+      "just",
+      "people",
+      "im",
+      "retail"
+    ],
+    "centroid_row": 0,
+    "example_titles": [
+      "Need advice",
+      "Ridiculous amount of stress",
+      "I\u2019m so confused by this interaction I\u2019ve had with the customer",
+      "My boss didn\u2019t want to let me leave to go to the ER.",
+      "Customers that try to be funny are the worst"
+    ],
+    "sim_mean": 0.5723,
+    "sim_std": 0.0935,
+    "sim_threshold": 0.45
+  },
+  "1": {
+    "cluster_id": 1,
+    "topic_label": "Mindfulness Practice",
+    "n_posts": 1244,
+    "top_keywords": [
+      "mindfulness",
+      "thoughts",
+      "mind",
+      "meditation",
+      "like",
+      "just",
+      "life",
+      "youre",
+      "practice",
+      "time"
+    ],
+    "centroid_row": 1,
+    "example_titles": [
+      "How do world leaders do mindfulness or are prepared to do?",
+      "Kumari Kandam \u2013 The Conspiracy That Will Rewrite Human History",
+      "the thing no one told me about anxiety (but should\u2019ve)",
+      "Overcoming trauma with mindful introspection",
+      "The Two-Minute Mirror Talk: Anchor Yourself in Truth"
+    ],
+    "sim_mean": 0.5734,
+    "sim_std": 0.0963,
+    "sim_threshold": 0.45
+  },
+  "2": {
+    "cluster_id": 2,
+    "topic_label": "Journaling Practices",
+    "n_posts": 998,
+    "top_keywords": [
+      "journal",
+      "journaling",
+      "write",
+      "writing",
+      "pages",
+      "paper",
+      "notebook",
+      "im",
+      "thoughts",
+      "use"
+    ],
+    "centroid_row": 2,
+    "example_titles": [
+      "Are you worried people will read it?",
+      "Ideas for a journaling workshop?",
+      "Hononichi 2026 Cover Sets",
+      "Tips!",
+      "Do you journal your gripes with people?"
+    ],
+    "sim_mean": 0.6495,
+    "sim_std": 0.0964,
+    "sim_threshold": 0.5049
+  },
+  "3": {
+    "cluster_id": 3,
+    "topic_label": "Parental Loss",
+    "n_posts": 613,
+    "top_keywords": [
+      "dad",
+      "im",
+      "mom",
+      "father",
+      "just",
+      "dont",
+      "know",
+      "wish",
+      "feel",
+      "miss"
+    ],
+    "centroid_row": 3,
+    "example_titles": [
+      "The cds need to go back in their cases",
+      "I don't know how to navigate this dad",
+      "First break-up",
+      "Having a tough time and wish I had a dad.",
+      "Today, it hurts."
+    ],
+    "sim_mean": 0.6544,
+    "sim_std": 0.0868,
+    "sim_threshold": 0.5242
+  },
+  "4": {
+    "cluster_id": 4,
+    "topic_label": "Personal Achievement",
+    "n_posts": 529,
+    "top_keywords": [
+      "today",
+      "ive",
+      "proud",
+      "finally",
+      "im",
+      "got",
+      "time",
+      "job",
+      "year",
+      "just"
+    ],
+    "centroid_row": 4,
+    "example_titles": [
+      "After months of chronic pain, I finally managed to be creative.",
+      "Double zip jacket struggle",
+      "Fire drill, dancing and parallel play",
+      "Reached out to university disability services for the first time",
+      "Finally got my own place!"
+    ],
+    "sim_mean": 0.5932,
+    "sim_std": 0.0755,
+    "sim_threshold": 0.48
+  },
+  "5": {
+    "cluster_id": 5,
+    "topic_label": "Career Uncertainty",
+    "n_posts": 481,
+    "top_keywords": [
+      "job",
+      "im",
+      "life",
+      "dont",
+      "feel",
+      "school",
+      "like",
+      "want",
+      "just",
+      "ive"
+    ],
+    "centroid_row": 5,
+    "example_titles": [
+      "Dad, I think I messed up and I feel trapped",
+      "I feel like I'm stuck",
+      "life so far has been birthing but ragebait especially now",
+      "Im a senior in college but I might just stop going",
+      "idk what to do next in life"
+    ],
+    "sim_mean": 0.6412,
+    "sim_std": 0.0849,
+    "sim_threshold": 0.5139
+  },
+  "6": {
+    "cluster_id": 6,
+    "topic_label": "Account Security Issues",
+    "n_posts": 431,
+    "top_keywords": [
+      "account",
+      "video",
+      "number",
+      "videos",
+      "help",
+      "phone",
+      "post",
+      "weird",
+      "called",
+      "information"
+    ],
+    "centroid_row": 6,
+    "example_titles": [
+      "I recorded a tiktok and when I watched it back I heard smt I didn\u2019t hear irl",
+      "Potential Serial Killer on TikTok",
+      "Need help verifying the authenticity of this \"Un-Redacted\" Epstein Little Black Book.",
+      "I got banned from a chat app for messing with scammers",
+      "How is this happening"
+    ],
+    "sim_mean": 0.5703,
+    "sim_std": 0.0926,
+    "sim_threshold": 0.45
+  },
+  "7": {
+    "cluster_id": 7,
+    "topic_label": "Self Acceptance",
+    "n_posts": 351,
+    "top_keywords": [
+      "people",
+      "feel",
+      "im",
+      "dont",
+      "like",
+      "things",
+      "person",
+      "want",
+      "know",
+      "just"
+    ],
+    "centroid_row": 7,
+    "example_titles": [
+      "I don't think I'm capable of change",
+      "How to stop self doubt",
+      "How to not hate people so much?",
+      "Wishing.",
+      "How do I remind myself to be kind to myself?"
+    ],
+    "sim_mean": 0.6576,
+    "sim_std": 0.0675,
+    "sim_threshold": 0.5564
+  },
+  "8": {
+    "cluster_id": 8,
+    "topic_label": "Everyday Kindness",
+    "n_posts": 235,
+    "top_keywords": [
+      "said",
+      "today",
+      "just",
+      "little",
+      "nice",
+      "bus",
+      "lady",
+      "coffee",
+      "got",
+      "day"
+    ],
+    "centroid_row": 8,
+    "example_titles": [
+      "interaction with person in Lorax costume",
+      "Oh my gosh I love people so much",
+      "Stopped at a lemonade stand today.",
+      "One Simple Statement Leads to a Smile",
+      "Bartender said I'm one of her favorite regulars today."
+    ],
+    "sim_mean": 0.605,
+    "sim_std": 0.0784,
+    "sim_threshold": 0.4874
+  },
+  "9": {
+    "cluster_id": 9,
+    "topic_label": "Relationship Struggles",
+    "n_posts": 227,
+    "top_keywords": [
+      "boyfriend",
+      "hes",
+      "relationship",
+      "want",
+      "feel",
+      "bf",
+      "im",
+      "just",
+      "doesnt",
+      "love"
+    ],
+    "centroid_row": 9,
+    "example_titles": [
+      "Men who are over thinkers.. how can we help you stop?",
+      "My bf (23M) is departing for six months to\u2026. Chinese Erasmus, leaving (20F) me, alone.",
+      "Why are so many men hard headed about setting a doctor when injured?",
+      "My 34/f boyfriend 37/m told me on our vacation I was only there to watch our son. Why did he say this?",
+      "My(F20) bf(M21) doesn\u2019t like it when I talk about stuff I like"
+    ],
+    "sim_mean": 0.6967,
+    "sim_std": 0.0717,
+    "sim_threshold": 0.5892
+  },
+  "10": {
+    "cluster_id": 10,
+    "topic_label": "Missing Persons",
+    "n_posts": 184,
+    "top_keywords": [
+      "information",
+      "help",
+      "missing",
+      "case",
+      "know",
+      "family",
+      "police",
+      "info",
+      "father",
+      "records"
+    ],
+    "centroid_row": 10,
+    "example_titles": [
+      "Finding out if someone has died?",
+      "I need to find Someone",
+      "One of my best friends murdered my other best friend, I need to know why.",
+      "Help me find my friend zeriah",
+      "Kentucky Grandpa missing for 20 years."
+    ],
+    "sim_mean": 0.6222,
+    "sim_std": 0.0763,
+    "sim_threshold": 0.5077
+  },
+  "11": {
+    "cluster_id": 11,
+    "topic_label": "Pet Adventures",
+    "n_posts": 180,
+    "top_keywords": [
+      "cat",
+      "dog",
+      "cats",
+      "dogs",
+      "little",
+      "shes",
+      "morning",
+      "happy",
+      "just",
+      "got"
+    ],
+    "centroid_row": 11,
+    "example_titles": [
+      "Letting My Kitten Try New Foods",
+      "My cat has invented religion",
+      "Why are you going to work in your underwear?",
+      "My cat was having a bad dream",
+      "How should I handle this awkward relationship with a stranger's dog?"
+    ],
+    "sim_mean": 0.5973,
+    "sim_std": 0.0739,
+    "sim_threshold": 0.4865
+  },
+  "12": {
+    "cluster_id": 12,
+    "topic_label": "Crush Confusion",
+    "n_posts": 170,
+    "top_keywords": [
+      "guy",
+      "like",
+      "friend",
+      "really",
+      "girl",
+      "crush",
+      "just",
+      "shes",
+      "said",
+      "hes"
+    ],
+    "centroid_row": 12,
+    "example_titles": [
+      "I 23m hooked up with my best friend 23f recently, where to go from here?",
+      "Want to ask out my classmate, but not sure if I\u2019m mistaking basic friendliness as interest. How can you tell with men?",
+      "He (25M) said I love you to me (22F) last night",
+      "how can a tell a guy is flirting/interested in me?",
+      "Tell me your opinions on having an to ex coworker who\u2019s somehow still in the group chat start liking updates about the store."
+    ],
+    "sim_mean": 0.6622,
+    "sim_std": 0.0606,
+    "sim_threshold": 0.5714
+  },
+  "13": {
+    "cluster_id": 13,
+    "topic_label": "Food Experiences",
+    "n_posts": 169,
+    "top_keywords": [
+      "ate",
+      "eating",
+      "eat",
+      "food",
+      "butter",
+      "bread",
+      "sauce",
+      "cheese",
+      "chicken",
+      "today"
+    ],
+    "centroid_row": 13,
+    "example_titles": [
+      "Pink baked beans in there.",
+      "Took me 30 years to realize I enjoy roast beef",
+      "Went out to \u201cfix my mood\u201d, came back with ingredients and no mood",
+      "I remembered and made a childhood-favorite meal",
+      "A senior colleague ate sweetened condensed milk out of the tin during a meeting"
+    ],
+    "sim_mean": 0.5791,
+    "sim_std": 0.0721,
+    "sim_threshold": 0.471
+  },
+  "14": {
+    "cluster_id": 14,
+    "topic_label": "Dental Anxiety",
+    "n_posts": 160,
+    "top_keywords": [
+      "dentist",
+      "teeth",
+      "doctor",
+      "blood",
+      "appointment",
+      "pain",
+      "im",
+      "dental",
+      "went",
+      "got"
+    ],
+    "centroid_row": 14,
+    "example_titles": [
+      "Doing His Own Prep",
+      "A fever reset my gut, and it is now the best!",
+      "Need a hug and reassurance i am okay now!",
+      "I got myself a tool to clean my ears at home.",
+      "Brushing teeth and feeling ashamed of going to the dentist"
+    ],
+    "sim_mean": 0.5665,
+    "sim_std": 0.0842,
+    "sim_threshold": 0.45
+  },
+  "15": {
+    "cluster_id": 15,
+    "topic_label": "Social Loneliness",
+    "n_posts": 149,
+    "top_keywords": [
+      "friends",
+      "people",
+      "dont",
+      "im",
+      "talk",
+      "lonely",
+      "make friends",
+      "social",
+      "feel",
+      "just"
+    ],
+    "centroid_row": 15,
+    "example_titles": [
+      "Ongoing problem from someone who introverted",
+      "As you got older, what became a major \"Green Flag\" in a male friendship that you didn't care about in your 20s?",
+      "Best ways to become social with people ? How to go about it?",
+      "[F/19] looking for friends :3",
+      "Tired of being alone."
+    ],
+    "sim_mean": 0.6774,
+    "sim_std": 0.0698,
+    "sim_threshold": 0.5727
+  },
+  "16": {
+    "cluster_id": 16,
+    "topic_label": "Bathroom Encounters",
+    "n_posts": 148,
+    "top_keywords": [
+      "door",
+      "toilet",
+      "house",
+      "went",
+      "didnt",
+      "bathroom",
+      "said",
+      "saw",
+      "room",
+      "happened"
+    ],
+    "centroid_row": 16,
+    "example_titles": [
+      "A friend of a friend",
+      "Two darts hit each other mid air",
+      "THUNDERSTORM WARNING",
+      "I accidentally framed my friends boyfriend for leaving the toilet seat up",
+      "A Trip, A Warning, A Decision"
+    ],
+    "sim_mean": 0.586,
+    "sim_std": 0.0682,
+    "sim_threshold": 0.4837
+  },
+  "17": {
+    "cluster_id": 17,
+    "topic_label": "Substance Cessation",
+    "n_posts": 147,
+    "top_keywords": [
+      "smoking",
+      "quit",
+      "day",
+      "time",
+      "drink",
+      "weed",
+      "drinking",
+      "alcohol",
+      "days",
+      "vaping"
+    ],
+    "centroid_row": 17,
+    "example_titles": [
+      "Day 7 of self improvement",
+      "I didn\u2019t drink any soda yesterday",
+      "Today's update",
+      "Self improvement",
+      "I worry I use weed to much"
+    ],
+    "sim_mean": 0.6247,
+    "sim_std": 0.0766,
+    "sim_threshold": 0.5098
+  },
+  "18": {
+    "cluster_id": 18,
+    "topic_label": "Nature Encounters",
+    "n_posts": 143,
+    "top_keywords": [
+      "bird",
+      "spider",
+      "saw",
+      "little",
+      "moon",
+      "birds",
+      "cat",
+      "away",
+      "just",
+      "water"
+    ],
+    "centroid_row": 18,
+    "example_titles": [
+      "Missing Kitty Mystery",
+      "Snakes",
+      "Fishing\u2026miracle?",
+      "Hanging out with pigeons",
+      "Ants in house"
+    ],
+    "sim_mean": 0.5728,
+    "sim_std": 0.0799,
+    "sim_threshold": 0.453
+  },
+  "19": {
+    "cluster_id": 19,
+    "topic_label": "Relationship Doubts",
+    "n_posts": 135,
+    "top_keywords": [
+      "boyfriend",
+      "hes",
+      "relationship",
+      "said",
+      "know",
+      "told",
+      "dont",
+      "feel",
+      "girlfriend",
+      "friend"
+    ],
+    "centroid_row": 19,
+    "example_titles": [
+      "F30 M36",
+      "I (f25) need advice on bf(m25) best friend",
+      "I (24F) found cigarette packet in Boyfriends (25m) bag - 5 years after quitting",
+      "23F / 25M I found out my boyfriend lied about his past for our entire 14-month relationship. Is it forgivable?",
+      "31 M  33 F"
+    ],
+    "sim_mean": 0.7016,
+    "sim_std": 0.058,
+    "sim_threshold": 0.6146
+  },
+  "20": {
+    "cluster_id": 20,
+    "topic_label": "Attraction Dynamics",
+    "n_posts": 134,
+    "top_keywords": [
+      "men",
+      "women",
+      "guys",
+      "like",
+      "attractive",
+      "woman",
+      "man",
+      "feel",
+      "im",
+      "girls"
+    ],
+    "centroid_row": 20,
+    "example_titles": [
+      "A substantial amount of men who lie about their height don\u2019t know they\u2019re lying",
+      "How does tolerance for women\u2019s bodies that aren\u2019t \u201cexactly your type\u201d change with age?",
+      "Want to understand men better, what\u2019s something you wish women truly understood about you that rarely gets talked about?",
+      "What is your type in women that is considered uncommon?",
+      "who do you think is the most beautiful and attractive? And why?"
+    ],
+    "sim_mean": 0.6074,
+    "sim_std": 0.0666,
+    "sim_threshold": 0.5075
+  },
+  "21": {
+    "cluster_id": 21,
+    "topic_label": "Cleaning Accomplishments",
+    "n_posts": 118,
+    "top_keywords": [
+      "cleaned",
+      "clean",
+      "cleaning",
+      "laundry",
+      "room",
+      "finally",
+      "today",
+      "dishes",
+      "washed",
+      "trash"
+    ],
+    "centroid_row": 21,
+    "example_titles": [
+      "i finally dealt with my desk and it actually feels like a win",
+      "Cleaned my bathroom",
+      "A little treat",
+      "After x weeks, I finally cleaned my room today",
+      "Genuinely the most exciting thing to happen so far this year"
+    ],
+    "sim_mean": 0.6533,
+    "sim_std": 0.0893,
+    "sim_threshold": 0.5194
+  },
+  "22": {
+    "cluster_id": 22,
+    "topic_label": "Relationship Struggles",
+    "n_posts": 118,
+    "top_keywords": [
+      "girlfriend",
+      "relationship",
+      "shes",
+      "gf",
+      "dont",
+      "feel",
+      "know",
+      "im",
+      "want",
+      "like"
+    ],
+    "centroid_row": 22,
+    "example_titles": [
+      "My (32M) long distance relationship (29F) makes me sad all the time.",
+      "How can I 28M tell my girlfriend 26F I\u2019m mentally tired?",
+      "Why do I still feel so uncertain after a month of college?",
+      "I (20M) tricked my girlfriend (20F) into getting a tetanus shot after a bad injury. Now she\u2019s blocked me everywhere. How do I fix this?",
+      "Ldr trouble: M18 and F18 ldr issues. Have no idea what to do?"
+    ],
+    "sim_mean": 0.7179,
+    "sim_std": 0.0608,
+    "sim_threshold": 0.6266
+  },
+  "23": {
+    "cluster_id": 23,
+    "topic_label": "Habit Formation",
+    "n_posts": 111,
+    "top_keywords": [
+      "study",
+      "hobbies",
+      "like",
+      "just",
+      "feel",
+      "want",
+      "time",
+      "things",
+      "dont",
+      "ive"
+    ],
+    "centroid_row": 23,
+    "example_titles": [
+      "My habits turn into obligations,i feel guilty about them.",
+      "Dad, I have no energy or motivation to engage in my hobbies anymore. How can I get them back?",
+      "What hobbies do you have that are affordable.",
+      "more things to do",
+      "Am I doomed to never play/learn volleyball?"
+    ],
+    "sim_mean": 0.6881,
+    "sim_std": 0.0679,
+    "sim_threshold": 0.5863
+  },
+  "24": {
+    "cluster_id": 24,
+    "topic_label": "Academic Achievement",
+    "n_posts": 109,
+    "top_keywords": [
+      "semester",
+      "school",
+      "got",
+      "college",
+      "year",
+      "im",
+      "finally",
+      "grades",
+      "exam",
+      "university"
+    ],
+    "centroid_row": 24,
+    "example_titles": [
+      "I got a 100 on my math final :)",
+      "Passed my thesis!",
+      "Two big tests, done!",
+      "I got a scholarship to a boarding school!",
+      "Completed Chapter 6 of My Dissertation"
+    ],
+    "sim_mean": 0.6649,
+    "sim_std": 0.0743,
+    "sim_threshold": 0.5534
+  },
+  "25": {
+    "cluster_id": 25,
+    "topic_label": "Rainy Morning Comfort",
+    "n_posts": 102,
+    "top_keywords": [
+      "rain",
+      "day",
+      "morning",
+      "little",
+      "bed",
+      "just",
+      "nice",
+      "coffee",
+      "today",
+      "husband"
+    ],
+    "centroid_row": 25,
+    "example_titles": [
+      "Husband shopping for appliances",
+      "Had a beautiful day with friends",
+      "The last Rolo",
+      "Lazy window in a hectic weekend",
+      "Quotes from my husband in the next room\u2026"
+    ],
+    "sim_mean": 0.5998,
+    "sim_std": 0.0677,
+    "sim_threshold": 0.4982
+  },
+  "26": {
+    "cluster_id": 26,
+    "topic_label": "Food Preferences",
+    "n_posts": 97,
+    "top_keywords": [
+      "chicken",
+      "cheese",
+      "beef",
+      "chocolate",
+      "toast",
+      "bottles",
+      "beans",
+      "turkey",
+      "supermarket",
+      "eat"
+    ],
+    "centroid_row": 26,
+    "example_titles": [
+      "What (else) should I put in my ham sandwich?",
+      "Has anyone else noticed the quality of food and ingredients is declining lately?",
+      "Where did the jelly go from pork pies?",
+      "Where did all the crumbles go?",
+      "Do young people eat corned beef?"
+    ],
+    "sim_mean": 0.566,
+    "sim_std": 0.0605,
+    "sim_threshold": 0.4752
+  },
+  "27": {
+    "cluster_id": 27,
+    "topic_label": "Sexual Compatibility",
+    "n_posts": 97,
+    "top_keywords": [
+      "sex",
+      "intimacy",
+      "hes",
+      "relationship",
+      "boyfriend",
+      "feel",
+      "like",
+      "want",
+      "partner",
+      "dont"
+    ],
+    "centroid_row": 27,
+    "example_titles": [
+      "23M 27F - First time after office party went sideways\u2026 need advice (and maybe a fix \ud83d\ude2d)",
+      "What can I do to overcome ED?",
+      "Virgin men",
+      "How is the feeling of pleasure from the male perspective during sex?",
+      "I (23M) am seeing my gf (23F) and need advice on being nervous about my size?"
+    ],
+    "sim_mean": 0.7012,
+    "sim_std": 0.0883,
+    "sim_threshold": 0.5687
+  },
+  "28": {
+    "cluster_id": 28,
+    "topic_label": "Dating Challenges",
+    "n_posts": 90,
+    "top_keywords": [
+      "dating",
+      "im",
+      "women",
+      "like",
+      "dont",
+      "ive",
+      "date",
+      "apps",
+      "just",
+      "single"
+    ],
+    "centroid_row": 28,
+    "example_titles": [
+      "How do I get a girlfriend in college?",
+      "How can you become genuinely happy and content with yourself?",
+      "I regret not going to college, but not for the reason you might think.",
+      "I feel bad that I missed out by not dating/finding a relationship when I was in my teens and 20s",
+      "Where can I meet single men beside dating apps?"
+    ],
+    "sim_mean": 0.7022,
+    "sim_std": 0.0588,
+    "sim_threshold": 0.614
+  },
+  "29": {
+    "cluster_id": 29,
+    "topic_label": "Home Maintenance",
+    "n_posts": 89,
+    "top_keywords": [
+      "dad",
+      "apartment",
+      "water",
+      "house",
+      "home",
+      "im",
+      "need",
+      "stuff",
+      "clean",
+      "moving"
+    ],
+    "centroid_row": 29,
+    "example_titles": [
+      "Need recommendation for a multimeter?",
+      "Dryer help!!",
+      "Advice needed about water-damaged appliances",
+      "Judgement?",
+      "Studs in wall"
+    ],
+    "sim_mean": 0.57,
+    "sim_std": 0.0919,
+    "sim_threshold": 0.45
+  },
+  "30": {
+    "cluster_id": 30,
+    "topic_label": "British Holiday Destinations",
+    "n_posts": 78,
+    "top_keywords": [
+      "uk",
+      "british",
+      "shops",
+      "holiday",
+      "town",
+      "places",
+      "best",
+      "kids",
+      "place",
+      "names"
+    ],
+    "centroid_row": 30,
+    "example_titles": [
+      "Which coastal town has the best promenade path?",
+      "The names of boats I saw today.",
+      "Why is the theatre so expensive?",
+      "Recommend me a book for long upcoming journey",
+      "If you were made benevolent dictator, what would be your new law with absurd punishment?"
+    ],
+    "sim_mean": 0.5534,
+    "sim_std": 0.069,
+    "sim_threshold": 0.45
+  },
+  "31": {
+    "cluster_id": 31,
+    "topic_label": "Body Acceptance",
+    "n_posts": 76,
+    "top_keywords": [
+      "weight",
+      "fat",
+      "eat",
+      "eating",
+      "body",
+      "gym",
+      "im",
+      "protein",
+      "lose",
+      "ive"
+    ],
+    "centroid_row": 31,
+    "example_titles": [
+      "What are some good tips for skinny guys to gain weight?",
+      "Fat loss and muscle hypertrophy",
+      "How do I decrease my belly fat when I\u2019m already really thin?",
+      "What has your experience been with Strength & endurance in comparison to your male peers ?",
+      "I\u2019ve come to accept at 24 that I might have a Bubble Bass build"
+    ],
+    "sim_mean": 0.6276,
+    "sim_std": 0.0866,
+    "sim_threshold": 0.4977
+  },
+  "32": {
+    "cluster_id": 32,
+    "topic_label": "Mysterious Noises",
+    "n_posts": 75,
+    "top_keywords": [
+      "sound",
+      "house",
+      "noise",
+      "coming",
+      "hear",
+      "apartment",
+      "room",
+      "loud",
+      "beep",
+      "heard"
+    ],
+    "centroid_row": 32,
+    "example_titles": [
+      "How can I become less sensitive to sound?",
+      "how to tell if smoke detector has cameras or mic",
+      "Loud and constant \u201ctuning fork\u201d type ringing that I can only hear in my bedroom",
+      "'Person Detected' on Doorbell Camera",
+      "Rational explanation of weird stuff happening in my friends apartment."
+    ],
+    "sim_mean": 0.6663,
+    "sim_std": 0.09,
+    "sim_threshold": 0.5313
+  },
+  "33": {
+    "cluster_id": 33,
+    "topic_label": "Clothing Choices",
+    "n_posts": 69,
+    "top_keywords": [
+      "wear",
+      "suit",
+      "shirts",
+      "clothes",
+      "stains",
+      "dress",
+      "im",
+      "sweat",
+      "pair",
+      "pants"
+    ],
+    "centroid_row": 33,
+    "example_titles": [
+      "What\u2019s the one pair of shoes every man should have?",
+      "What do you all do for swamp ass?",
+      "Wine stains on wood - how to get rid of them",
+      "Other guys, how many outfits do you own?",
+      "How to remove stains from cotton and dry without shrinking or mildew build up"
+    ],
+    "sim_mean": 0.5536,
+    "sim_std": 0.0699,
+    "sim_threshold": 0.45
+  },
+  "34": {
+    "cluster_id": 34,
+    "topic_label": "Breakup Recovery",
+    "n_posts": 69,
+    "top_keywords": [
+      "ex",
+      "broke",
+      "relationship",
+      "just",
+      "feel",
+      "dont",
+      "things",
+      "know",
+      "time",
+      "really"
+    ],
+    "centroid_row": 34,
+    "example_titles": [
+      "i\u2019ve moved on from my break up in a matter of weeks",
+      "Why do exes come back ?",
+      "I (30M) get thoughts about previous (30F) relationship with the holiday?",
+      "How do I forget about dating?",
+      "Me (29/f) finally left a 6 year relationship with (29/m)-is it okay to move on within a month and attempt to date again?"
+    ],
+    "sim_mean": 0.7328,
+    "sim_std": 0.0562,
+    "sim_threshold": 0.6485
+  },
+  "35": {
+    "cluster_id": 35,
+    "topic_label": "Social Media Impact",
+    "n_posts": 67,
+    "top_keywords": [
+      "ai",
+      "social media",
+      "media",
+      "social",
+      "chatgpt",
+      "using",
+      "delete",
+      "instagram",
+      "reddit",
+      "im"
+    ],
+    "centroid_row": 35,
+    "example_titles": [
+      "Facebook boomers have to be one of the stupidest demographics on the planet",
+      "How do I come to terms with losing access to content I\u2019ve subscribed to on Instagram & Twitter?",
+      "I am spending more and more of my time talking to AI",
+      "I uninstalled ChatGPT",
+      "I\u2019m deleting Reddit"
+    ],
+    "sim_mean": 0.6271,
+    "sim_std": 0.0949,
+    "sim_threshold": 0.4848
+  },
+  "36": {
+    "cluster_id": 36,
+    "topic_label": "Car Ownership",
+    "n_posts": 64,
+    "top_keywords": [
+      "car",
+      "insurance",
+      "garage",
+      "new car",
+      "vehicle",
+      "dad",
+      "new",
+      "need",
+      "miles",
+      "cars"
+    ],
+    "centroid_row": 36,
+    "example_titles": [
+      "May have hit parked car in parking garage - What to do next",
+      "Scraped my tire :(",
+      "How do i negotiate better?",
+      "Nothing damaged my car",
+      "Any experiences with foldable garages to protect cars?"
+    ],
+    "sim_mean": 0.6165,
+    "sim_std": 0.0935,
+    "sim_threshold": 0.4763
+  },
+  "37": {
+    "cluster_id": 37,
+    "topic_label": "Musical Nostalgia",
+    "n_posts": 64,
+    "top_keywords": [
+      "song",
+      "songs",
+      "radio",
+      "tv",
+      "fireworks",
+      "listening",
+      "british",
+      "music",
+      "al",
+      "remember"
+    ],
+    "centroid_row": 37,
+    "example_titles": [
+      "The new style of \"funerals\"",
+      "Protest songs",
+      "What\u2019s a moment when you realized you were officially \"old\"?",
+      "Please, please Mackenzie Crook, make more Detectorists",
+      "Radio 4 Comedy programmes"
+    ],
+    "sim_mean": 0.547,
+    "sim_std": 0.0619,
+    "sim_threshold": 0.4542
+  },
+  "38": {
+    "cluster_id": 38,
+    "topic_label": "License Plate Assistance",
+    "n_posts": 63,
+    "top_keywords": [
+      "plate",
+      "license plate",
+      "license",
+      "car",
+      "vehicle",
+      "hit",
+      "help",
+      "police",
+      "run",
+      "footage"
+    ],
+    "centroid_row": 38,
+    "example_titles": [
+      "Need help reading this plate",
+      "Hoping to get an identification or some insight on what kind of bone this is.",
+      "Dashcam appeal after man bitten in town",
+      "Can anyone help me read the license plate of the silver station wagon next to my car?",
+      "Got hit and run, please help identifying license plate"
+    ],
+    "sim_mean": 0.7051,
+    "sim_std": 0.0932,
+    "sim_threshold": 0.5653
+  },
+  "39": {
+    "cluster_id": 39,
+    "topic_label": "Christmas Gifting",
+    "n_posts": 58,
+    "top_keywords": [
+      "christmas",
+      "gift",
+      "year",
+      "family",
+      "eve",
+      "gifts",
+      "christmas eve",
+      "presents",
+      "santa",
+      "new years"
+    ],
+    "centroid_row": 39,
+    "example_titles": [
+      "Secret Santa",
+      "It's Christmas Norah!",
+      "Do you still wish random strangers 'Happy Christmas', when you're out and about today?",
+      "Suggestions for a gift to neighbour",
+      "Quirky birthday presents for terminally ill friend."
+    ],
+    "sim_mean": 0.5902,
+    "sim_std": 0.0772,
+    "sim_threshold": 0.4744
+  },
+  "40": {
+    "cluster_id": 40,
+    "topic_label": "Mindfulness Apps",
+    "n_posts": 56,
+    "top_keywords": [
+      "app",
+      "feedback",
+      "breathing",
+      "meditation",
+      "mindfulness",
+      "built",
+      "project",
+      "apps",
+      "mindful",
+      "survey"
+    ],
+    "centroid_row": 40,
+    "example_titles": [
+      "How do you normally decide where to go for a run? Genuinely curious (short survey link included)",
+      "I built a tool that turns your SaaS into endless high-converting ads (Aphilio)",
+      "How I started tracking my emotions daily with meditation and it surprised me",
+      "I built an app that helpes you calm down using breathing excersizes and a calming frequency based on ur feelings.",
+      "How do you practice financial mindfulness? We're building a tool to measure the joy in your spending."
+    ],
+    "sim_mean": 0.6604,
+    "sim_std": 0.0903,
+    "sim_threshold": 0.5249
+  },
+  "41": {
+    "cluster_id": 41,
+    "topic_label": "Self Image Issues",
+    "n_posts": 52,
+    "top_keywords": [
+      "ugly",
+      "look",
+      "im ugly",
+      "im",
+      "pretty",
+      "face",
+      "feel",
+      "people",
+      "like",
+      "just"
+    ],
+    "centroid_row": 41,
+    "example_titles": [
+      "For the first time in my life I was happy with how I look, and I\u2019ve lost it",
+      "How to not feel ugly",
+      "How can ugly people become charismatic?",
+      "How to stop worrying about my looks and live in the present?",
+      "How should I improve my self ?"
+    ],
+    "sim_mean": 0.7161,
+    "sim_std": 0.0565,
+    "sim_threshold": 0.6314
+  },
+  "42": {
+    "cluster_id": 42,
+    "topic_label": "Hair Identity",
+    "n_posts": 52,
+    "top_keywords": [
+      "hair",
+      "haircut",
+      "cut",
+      "beard",
+      "barber",
+      "look",
+      "grow",
+      "hairs",
+      "shaved",
+      "bald"
+    ],
+    "centroid_row": 42,
+    "example_titles": [
+      "Cut my hair!",
+      "Pubic hair has become very very very thin??? (17F)",
+      "My body hair is unacceptably noticeable",
+      "My cousin and I found our first gray hairs on the same week.",
+      "I need help with making a haircut appointment."
+    ],
+    "sim_mean": 0.6386,
+    "sim_std": 0.0751,
+    "sim_threshold": 0.5259
+  },
+  "43": {
+    "cluster_id": 43,
+    "topic_label": "Teacher Misconduct",
+    "n_posts": 50,
+    "top_keywords": [
+      "teacher",
+      "class",
+      "school",
+      "said",
+      "teachers",
+      "grade",
+      "didnt",
+      "got",
+      "math",
+      "classroom"
+    ],
+    "centroid_row": 43,
+    "example_titles": [
+      "\u201cI didn\u2019t hear you say ADHD.\u201d \u201cYes, that\u2019s because you have ADHD.\u201d \ud83d\ude02",
+      "In highscool a sophomore got his licensee taken away a day after getting it",
+      "What is the most malicious thing a teacher did?",
+      "Funniest excuse I\u2019ve ever heard in school",
+      "The dumbest reason I got in \u201ctrouble\u201d"
+    ],
+    "sim_mean": 0.6171,
+    "sim_std": 0.0814,
+    "sim_threshold": 0.495
+  }
+}

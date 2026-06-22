@@ -18,8 +18,9 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 HERE = Path(__file__).resolve().parent
+SHARED = HERE.parent.parent / "shared"   # 整理後：repo 根目錄下的共用資料夾
 load_dotenv(HERE / ".env")
-load_dotenv(HERE.parent / ".env")
+load_dotenv(SHARED / ".env")
 
 # 延遲建立 client:本地用 .env、雲端用平台 secrets(由 UI 注入 os.environ)。
 _client = None
@@ -175,9 +176,9 @@ POSTS = [
      "url": "https://www.reddit.com/r/insomnia/comments/1kq3rmk/slept_absolutely_zero_hours_last_night_again_and/", "flagged": False},
 ]
 
-# id 17 的全文上次已存在上層資料夾,先映射過去;其餘等之後補進 posts/
+# id 17 的全文上次已存在共用資料夾,先映射過去;其餘等之後補進 posts/
 KNOWN_FULL_TEXT = {
-    17: HERE.parent / "selected_post_habitchange.txt",
+    17: SHARED / "selected_post_habitchange.txt",
 }
 
 
@@ -222,12 +223,16 @@ def _usage(response):
     }
 
 
-def generate_ccd(post_text: str):
-    """回傳 (ccd_text, saved_path, info)。同一篇 post 走快取。
+def generate_ccd(post_text: str, ccd_prompt: str = None):
+    """回傳 (ccd_text, saved_path, info)。同一篇 post + 同一份 prompt 走快取。
+
+    ccd_prompt: 自訂的 CCD 建構 prompt(含 {patient_text});None 則用預設 CCD_PROMPT。
+    快取 key 同時看 prompt,所以「只改 prompt」也會重新生成(解掉舊版無法重抽的問題)。
 
     info = {latency, cached, prompt_tokens, completion_tokens, total_tokens}
     """
-    key = hashlib.sha256(post_text.strip().encode("utf-8")).hexdigest()
+    ccd_prompt = ccd_prompt or CCD_PROMPT
+    key = hashlib.sha256((ccd_prompt + "\x00" + post_text).strip().encode("utf-8")).hexdigest()
     if key in _ccd_cache:
         ccd, path = _ccd_cache[key]
         return ccd, path, {"latency": 0.0, "cached": True,
@@ -239,7 +244,7 @@ def generate_ccd(post_text: str):
         max_tokens=2000,
         messages=[
             {"role": "system", "content": "You are a clinical psychologist trained in CBT and Cognitive Case Conceptualization."},
-            {"role": "user", "content": CCD_PROMPT.format(patient_text=post_text)},
+            {"role": "user", "content": ccd_prompt.format(patient_text=post_text)},
         ],
     )
     latency = time.perf_counter() - t0
@@ -253,8 +258,11 @@ def generate_ccd(post_text: str):
     return ccd, str(out_path), info
 
 
-def build_persona(mode: str, post_text: str):
+def build_persona(mode: str, post_text: str, ccd_prompt: str = None, persona_prompt: str = None):
     """依模式建立 persona 的 system prompt。
+
+    ccd_prompt     - 自訂 CCD 建構 prompt(僅 CCD 模式用;None 用預設)
+    persona_prompt - 自訂 roleplay prompt(None 用該模式的預設範本)
 
     回傳 dict:
       system     - persona 的 system prompt
@@ -265,13 +273,24 @@ def build_persona(mode: str, post_text: str):
       info       - 生成的 token / cached 資訊(CCD 模式才有)
     """
     if mode == MODE_CCD:
-        ccd, path, info = generate_ccd(post_text)
-        return {"system": PERSONA_SYSTEM_PROMPT.format(ccd_text=ccd.strip()),
+        ccd, path, info = generate_ccd(post_text, ccd_prompt)
+        tmpl = persona_prompt or PERSONA_SYSTEM_PROMPT
+        return {"system": tmpl.format(ccd_text=ccd.strip()),
                 "basis": "CCD", "ccd": ccd, "ccd_path": path,
                 "build_secs": info["latency"], "info": info}
-    return {"system": PERSONA_DIRECT_PROMPT.format(post_text=post_text.strip()),
+    tmpl = persona_prompt or PERSONA_DIRECT_PROMPT
+    return {"system": tmpl.format(post_text=post_text.strip()),
             "basis": "Post", "ccd": None, "ccd_path": None,
             "build_secs": 0.0, "info": None}
+
+
+def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None) -> str:
+    """用(可能手改過的)CCD 內文組出 persona 的 system prompt,不打 API。
+
+    給「手動編輯 CCD 後重建 persona」用:persona_prompt None 則用預設範本。
+    """
+    tmpl = persona_prompt or PERSONA_SYSTEM_PROMPT
+    return tmpl.format(ccd_text=ccd_text.strip())
 
 
 def chat_once(messages: list):

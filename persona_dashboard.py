@@ -128,6 +128,11 @@ _defaults = {
     "built_post": "",
     "built_view": None,
     "saved": [],
+    "build_nonce": 0,      # bumped on each build, so the editable CCD box re-syncs to the new CCD
+    # editable prompt templates (default to persona_core's; user can tweak in the UI)
+    "ccd_prompt_edit": core.CCD_PROMPT,
+    "persona_ccd_prompt_edit": core.PERSONA_SYSTEM_PROMPT,
+    "persona_direct_prompt_edit": core.PERSONA_DIRECT_PROMPT,
 }
 for k, v in _defaults.items():
     st.session_state.setdefault(k, v)
@@ -140,6 +145,12 @@ def has_persona() -> bool:
 # --- callbacks -------------------------------------------------------------
 def load_sample():
     st.session_state.post_input = core.load_post_text(17)
+
+
+def reset_prompts():
+    st.session_state.ccd_prompt_edit = core.CCD_PROMPT
+    st.session_state.persona_ccd_prompt_edit = core.PERSONA_SYSTEM_PROMPT
+    st.session_state.persona_direct_prompt_edit = core.PERSONA_DIRECT_PROMPT
 
 
 def clear_chat():
@@ -178,6 +189,26 @@ def load_persona():
                              for kk, run in s["runs"].items()}
 
 
+# --- pricing / formatting helpers -----------------------------------------
+# gpt-4o list price (USD per 1M tokens). Update here if OpenAI changes rates.
+PRICE_IN, PRICE_OUT = 2.50, 10.00
+
+
+def _cost(prompt_tokens, completion_tokens) -> float:
+    return ((prompt_tokens or 0) * PRICE_IN + (completion_tokens or 0) * PRICE_OUT) / 1_000_000
+
+
+def _meta_bits(info: dict) -> list:
+    """Turn one latency/token info dict into short display chips."""
+    bits = []
+    if info.get("latency"):
+        bits.append(f"⏱ {info['latency']:.1f}s")
+    if info.get("total_tokens"):
+        bits.append(f"🔢 {info['total_tokens']} tok")
+        bits.append(f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
+    return bits
+
+
 def build_export_text() -> str:
     lines = ["Persona Chat Export",
              f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -187,24 +218,41 @@ def build_export_text() -> str:
              st.session_state.built_post or "(none)",
              ""]
     for kk, run in st.session_state.runs.items():
-        lines.append(f"===== {KEY_LABEL[kk]} (build {run['build_secs']:.1f}s) =====")
+        bhdr = f"build {run['build_secs']:.1f}s"
+        binfo = run.get("build_info")
+        if binfo and binfo.get("total_tokens"):
+            bhdr += f", {binfo['total_tokens']} tok, ~${_cost(binfo.get('prompt_tokens'), binfo.get('completion_tokens')):.4f}"
+        lines.append(f"===== {KEY_LABEL[kk]} ({bhdr}) =====")
         if run.get("ccd"):
             lines += ["[CCD profile]", run["ccd"], ""]
         lines.append("[Chat]")
-        for role, text, lat in run["chat_history"]:
+        for role, text, info in run["chat_history"]:
             who = "You" if role == "you" else "Persona"
-            tag = f" (⏱ {lat:.1f}s)" if lat else ""
+            tag = ""
+            if info:
+                bits = _meta_bits(info)
+                if bits:
+                    tag = f" ({', '.join(b.replace('⏱ ', '').replace('🔢 ', '') for b in bits)})"
             lines.append(f"{who}{tag}: {text}")
         lines.append("")
     return "\n".join(lines)
 
 
 def render_transcript(run):
-    for role, text, lat in run["chat_history"]:
+    for role, text, info in run["chat_history"]:
         with st.chat_message("user" if role == "you" else "assistant"):
             st.write(text)
-            if role != "you" and lat:
-                st.caption(f"⏱ {lat:.1f}s")
+            if role != "you" and info:
+                bits = _meta_bits(info)
+                if bits:
+                    st.caption(" · ".join(bits))
+    # cumulative totals for this run (handy for the A·B comparison)
+    turns = [info for role, _, info in run["chat_history"] if role != "you" and info]
+    if turns:
+        tot_tok = sum(i.get("total_tokens") or 0 for i in turns)
+        tot_s = sum(i.get("latency") or 0 for i in turns)
+        tot_cost = sum(_cost(i.get("prompt_tokens"), i.get("completion_tokens")) for i in turns)
+        st.caption(f"**Σ {len(turns)} replies · {tot_tok} tok · {tot_s:.1f}s · ~${tot_cost:.4f}**")
 
 
 # ===========================================================================
@@ -226,6 +274,40 @@ with st.expander("📖 How to use (read this first)", expanded=not has_persona()
 4. Chat with the persona in **Chat test** below; each reply shows its **⏱ response time**. In side-by-side mode, the same message goes to both A and B.
 5. Want to keep it → **"💾 Save"**; want a record → **"⬇️ Export chat (.txt)"**.
 """)
+
+with st.expander("🧩 Show / edit the prompts behind each stage", expanded=False):
+    st.caption(
+        "These are the real prompt templates we send to the model — editable here. Edit any prompt, "
+        "then click **Build / Rebuild Persona** to apply it — editing the CCD prompt and rebuilding the "
+        "same post will regenerate the CCD. Keep each `{curly}` placeholder: that's where the post or "
+        "CCD gets inserted."
+    )
+    st.button("↩️ Reset all prompts to default", on_click=reset_prompts)
+    pc_a, pc_b = st.columns(2)
+    with pc_a:
+        st.markdown("##### Method A · via CCD")
+        st.markdown("**① Build CCD** — turns the post into an 8-section CCD "
+                    "(Persons, 2008). &nbsp;`{patient_text}` ← the post text.")
+        st.text_area("CCD construction prompt", key="ccd_prompt_edit", height=240,
+                     label_visibility="collapsed")
+        if "{patient_text}" not in st.session_state.ccd_prompt_edit:
+            st.warning("⚠️ Missing `{patient_text}` — the post won't be inserted into this prompt.")
+        st.markdown("**② Roleplay from CCD** — the persona's system prompt; the CCD is the "
+                    "character sheet. &nbsp;`{ccd_text}` ← the CCD built in step ①.")
+        st.text_area("Roleplay-from-CCD prompt", key="persona_ccd_prompt_edit", height=240,
+                     label_visibility="collapsed")
+        if "{ccd_text}" not in st.session_state.persona_ccd_prompt_edit:
+            st.warning("⚠️ Missing `{ccd_text}` — the CCD won't be inserted into this prompt.")
+    with pc_b:
+        st.markdown("##### Method B · direct")
+        st.markdown("**③ Roleplay from post** — the persona's system prompt with no CCD step; the "
+                    "raw post is the character sheet. &nbsp;`{post_text}` ← the post text.")
+        st.text_area("Roleplay-from-post prompt", key="persona_direct_prompt_edit", height=240,
+                     label_visibility="collapsed")
+        if "{post_text}" not in st.session_state.persona_direct_prompt_edit:
+            st.warning("⚠️ Missing `{post_text}` — the post won't be inserted into this prompt.")
+        st.caption("Same roleplay rules as Method A — only the source differs (post instead of CCD). "
+                   "That contrast is exactly what the A·B test compares.")
 
 view = st.radio(
     "Mode",
@@ -269,7 +351,13 @@ if build:
             mode = KEY_MODE[kk]
             try:
                 with st.spinner(f"Building {KEY_LABEL[kk]}…"):
-                    res = core.build_persona(mode, post_text)
+                    res = core.build_persona(
+                        mode, post_text,
+                        ccd_prompt=st.session_state.ccd_prompt_edit,
+                        persona_prompt=(st.session_state.persona_ccd_prompt_edit
+                                        if mode == core.MODE_CCD
+                                        else st.session_state.persona_direct_prompt_edit),
+                    )
             except Exception as e:
                 st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__} — please try again.")
                 ok = False
@@ -277,6 +365,7 @@ if build:
             runs[kk] = {
                 "mode": mode, "system": res["system"], "basis": res["basis"],
                 "ccd": res["ccd"], "ccd_path": res["ccd_path"], "build_secs": res["build_secs"],
+                "build_info": res["info"],
                 "messages": [{"role": "system", "content": res["system"]}],
                 "chat_history": [],
             }
@@ -284,11 +373,21 @@ if build:
             st.session_state.runs = runs
             st.session_state.built_post = post_text
             st.session_state.built_view = view
+            st.session_state.build_nonce += 1
             st.rerun()
 
 if has_persona():
-    secs = " · ".join(f"{KEY_LABEL[kk]} {run['build_secs']:.1f}s" for kk, run in st.session_state.runs.items())
-    st.success(f"Persona ready · {st.session_state.built_view} · build time: {secs}")
+    def _build_summary(kk, run):
+        s = f"{KEY_LABEL[kk]} {run['build_secs']:.1f}s"
+        info = run.get("build_info")
+        if info and info.get("total_tokens"):
+            s += (f" · {info['total_tokens']} tok · "
+                  f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
+        elif info and info.get("cached"):
+            s += " · CCD cached"
+        return s
+    secs = " · ".join(_build_summary(kk, run) for kk, run in st.session_state.runs.items())
+    st.success(f"Persona ready · {st.session_state.built_view} · {secs}")
 else:
     st.info("Paste a post, pick a mode, then click \"Build / Rebuild Persona\".")
 
@@ -354,22 +453,44 @@ if user_input:
         run["messages"].append({"role": "user", "content": user_input})
         try:
             reply, info = core.chat_once(run["messages"])
-            lat = info["latency"]
         except Exception as e:
-            reply, lat = f"(Error: {type(e).__name__}, please try again)", None
+            reply, info = f"(Error: {type(e).__name__}, please try again)", None
         run["messages"].append({"role": "assistant", "content": reply})
         run["chat_history"].append(("you", user_input, None))
-        run["chat_history"].append(("persona", reply, lat))
+        run["chat_history"].append(("persona", reply, info))
     st.rerun()
 
-# --- CCD profile -----------------------------------------------------------
+# --- CCD profile (editable) ------------------------------------------------
 if has_persona():
     st.divider()
-    st.subheader("CCD profile (8 sections)")
+    st.subheader("CCD profile (8 sections) — editable")
     a_run = runs.get("A")
     if a_run and a_run.get("ccd"):
         if a_run.get("ccd_path"):
             st.caption(f"📄 {a_run['ccd_path']}")
-        st.text(a_run["ccd"])
+        st.caption("Hand-fix the CCD (e.g. if the model misread the post), then apply it — this "
+                   "rebuilds the persona from your edited CCD **without another API call** and clears "
+                   "the Method A chat so the new persona starts fresh.")
+        edited_ccd = st.text_area("CCD (editable)", value=a_run["ccd"], height=340,
+                                  key=f"ccd_edit_{st.session_state.build_nonce}",
+                                  label_visibility="collapsed")
+        if st.button("✅ Apply edited CCD → rebuild Method A persona"):
+            a_run["ccd"] = edited_ccd
+            a_run["system"] = core.persona_system_from_ccd(
+                edited_ccd, st.session_state.persona_ccd_prompt_edit)
+            a_run["messages"] = [{"role": "system", "content": a_run["system"]}]
+            a_run["chat_history"] = []
+            st.success("Persona rebuilt from the edited CCD. Method A chat was reset.")
+            st.rerun()
     else:
         st.info("The current view has no Method A (CCD), so there's no CCD profile.")
+
+# --- Final system prompt actually sent -------------------------------------
+if has_persona():
+    st.divider()
+    st.subheader("Final system prompt sent to the model")
+    st.caption("The prompt template with the placeholder already filled in — this exact text is the "
+               "persona's system message for every reply in the chat above.")
+    for kk, run in runs.items():
+        with st.expander(f"{KEY_LABEL[kk]} — system prompt", expanded=False):
+            st.code(run["system"], language="text")

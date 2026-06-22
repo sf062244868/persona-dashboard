@@ -1,6 +1,6 @@
 # clusters/ — 接口 placeholder
 
-`persona_interface.py` 的 `load_clusters()` 目前直接用 `Merged_Post_List.md` 的
+`persona_core.py` 的 `load_clusters()` 目前直接用 `Merged_Post_List.md` 的
 8 個人工 category 當分群（Relationship · Family · Loneliness · Addiction · Career ·
 Milestone · Habit Change · Sleep）。
 
