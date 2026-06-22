@@ -86,6 +86,7 @@ st.markdown("""
   .pp-node{flex:1 1 0;min-width:0;border-radius:9px;padding:8px 6px;text-align:center;border:1.5px solid;
            display:flex;flex-direction:column;justify-content:center;gap:2px;}
   .pp-node b{font-size:12px;color:#1f2933;} .pp-node small{font-size:10px;color:#5b6b7a;line-height:1.2;}
+  .pp-node .call{font-size:9px;color:#0f766e;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.2;margin-top:2px;}
   .pp-node.post{background:#fdebcf;border-color:#e9b873;}
   .pp-node.ccd{background:#d6f0ec;border-color:#7fc9bf;}
   .pp-node.persona{background:#eef3ff;border-color:#9bb4ea;}
@@ -100,21 +101,21 @@ PIPELINE_HTML = """
   <div class="pp-panel a">
     <div class="pp-title a"><span class="tag">A</span>Post-CCD-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>raw post</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node ccd"><b>CCD</b><small>Beck format</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node persona"><b>Persona</b><small>from CCD</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node chat"><b>Chatbox</b><small>chat</small></div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_post_text()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node ccd"><b>CCD</b><small>Beck format</small><small class="call">gpt-4o<br>generate_ccd()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node persona"><b>Persona</b><small>from CCD</small><small class="call">build_persona()<br>(fills CCD prompt)</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node chat"><b>Chatbox</b><small>chat</small><small class="call">gpt-4o<br>chat_once()</small></div>
     </div>
-    <span class="pp-cap">Turn the post into a Beck-format CCD, then build the persona from the CCD.</span>
+    <span class="pp-cap">Turn the post into a Beck-format CCD, then build the persona from the CCD. &nbsp;·&nbsp; backend: <code>persona_core.py</code></span>
   </div>
   <div class="pp-panel b">
     <div class="pp-title b"><span class="tag">B</span>Direct Post-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>raw post</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node persona"><b>Persona</b><small>from post</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node chat"><b>Chatbox</b><small>chat</small></div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_post_text()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node persona"><b>Persona</b><small>from post</small><small class="call">build_persona()<br>(fills post prompt)</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node chat"><b>Chatbox</b><small>chat</small><small class="call">gpt-4o<br>chat_once()</small></div>
     </div>
-    <span class="pp-cap">Skip the CCD; build the persona directly from the raw post.</span>
+    <span class="pp-cap">Skip the CCD; build the persona directly from the raw post. &nbsp;·&nbsp; backend: <code>persona_core.py</code></span>
   </div>
 </div>
 """
