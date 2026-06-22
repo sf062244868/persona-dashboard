@@ -260,6 +260,12 @@ def generate_ccd(post_text: str, ccd_prompt: str = None):
     )
     latency = time.perf_counter() - t0
     ccd = response.choices[0].message.content
+    if not ccd or not ccd.strip():
+        # e.g. content filter / refusal / empty completion — fail with a clear message
+        # instead of a cryptic TypeError when we try to write None to disk.
+        finish = getattr(response.choices[0], "finish_reason", "unknown")
+        raise ValueError(f"The model returned no CCD text (finish_reason={finish}). "
+                         "Try a different post or adjust the CCD prompt.")
     CCD_DIR.mkdir(exist_ok=True)
     existing = [f for f in os.listdir(CCD_DIR) if f.startswith("single_") and f.endswith("_ccd.txt")]
     out_path = CCD_DIR / f"single_{len(existing) + 1:03d}_ccd.txt"

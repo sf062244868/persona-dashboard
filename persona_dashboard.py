@@ -359,7 +359,7 @@ if build:
                                         else st.session_state.persona_direct_prompt_edit),
                     )
             except Exception as e:
-                st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__} — please try again.")
+                st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__}: {e}")
                 ok = False
                 break
             runs[kk] = {
@@ -454,7 +454,7 @@ if user_input:
         try:
             reply, info = core.chat_once(run["messages"])
         except Exception as e:
-            reply, info = f"(Error: {type(e).__name__}, please try again)", None
+            reply, info = f"(Error: {type(e).__name__}: {e})", None
         run["messages"].append({"role": "assistant", "content": reply})
         run["chat_history"].append(("you", user_input, None))
         run["chat_history"].append(("persona", reply, info))
