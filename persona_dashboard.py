@@ -257,185 +257,159 @@ def render_transcript(run):
 
 
 # ===========================================================================
-# Top: title + pipeline + tutorial + mode
+# SIDEBAR — all setup / controls (so the main area stays put on the chat)
 # ===========================================================================
-st.title("Persona Generation Interface")
+with st.sidebar:
+    st.header("⚙️ Setup")
 
-with st.expander("Method Pipeline (A / B flow)", expanded=not has_persona()):
-    st.markdown(PIPELINE_HTML, unsafe_allow_html=True)
-
-with st.expander("📖 How to use (read this first)", expanded=not has_persona()):
-    st.markdown("""
-**What this tool does**: turns a post / self-description into a *chattable persona*, and lets you compare two ways of generating it.
-
-**Steps**
-1. Pick a **mode**: **Method A** (turn it into a Beck-format CCD first) / **Method B** (build directly from the raw text) / **A·B Side-by-side** (build both and compare).
-2. **Paste a post**, or click **"Load sample post"**.
-3. Click **"Build / Rebuild Persona"**.
-4. Chat with the persona in **Chat test** below; each reply shows its **⏱ response time**. In side-by-side mode, the same message goes to both A and B.
-5. Want to keep it → **"💾 Save"**; want a record → **"⬇️ Export chat (.txt)"**.
-""")
-
-with st.expander("🧩 Show / edit the prompts behind each stage", expanded=False):
-    st.caption(
-        "These are the real prompt templates we send to the model — editable here. Edit any prompt, "
-        "then click **Build / Rebuild Persona** to apply it — editing the CCD prompt and rebuilding the "
-        "same post will regenerate the CCD. Keep each `{curly}` placeholder: that's where the post or "
-        "CCD gets inserted."
+    view = st.radio(
+        "Mode",
+        [VIEW_A, VIEW_B, VIEW_AB],
+        key="view_radio",
+        help="A: build a CCD first, then the persona. B: build directly from the post. A·B: build both and compare.",
     )
-    st.button("↩️ Reset all prompts to default", on_click=reset_prompts)
-    pc_a, pc_b = st.columns(2)
-    with pc_a:
-        st.markdown("##### Method A · via CCD")
-        st.markdown("**① Build CCD** — turns the post into a Beck Cognitive Conceptualization "
-                    "Diagram (Beck, 2020). &nbsp;`{patient_text}` ← the post text.")
-        st.text_area("CCD construction prompt", key="ccd_prompt_edit", height=240,
-                     label_visibility="collapsed")
-        if "{patient_text}" not in st.session_state.ccd_prompt_edit:
-            st.warning("⚠️ Missing `{patient_text}` — the post won't be inserted into this prompt.")
-        st.markdown("**② Roleplay from CCD** — the persona's system prompt; the CCD is the "
-                    "character sheet. &nbsp;`{ccd_text}` ← the CCD built in step ①.")
-        st.text_area("Roleplay-from-CCD prompt", key="persona_ccd_prompt_edit", height=240,
-                     label_visibility="collapsed")
-        if "{ccd_text}" not in st.session_state.persona_ccd_prompt_edit:
-            st.warning("⚠️ Missing `{ccd_text}` — the CCD won't be inserted into this prompt.")
-    with pc_b:
-        st.markdown("##### Method B · direct")
-        st.markdown("**③ Roleplay from post** — the persona's system prompt with no CCD step; the "
-                    "raw post is the character sheet. &nbsp;`{post_text}` ← the post text.")
-        st.text_area("Roleplay-from-post prompt", key="persona_direct_prompt_edit", height=240,
-                     label_visibility="collapsed")
-        if "{post_text}" not in st.session_state.persona_direct_prompt_edit:
-            st.warning("⚠️ Missing `{post_text}` — the post won't be inserted into this prompt.")
-        st.caption("Same roleplay rules as Method A — only the source differs (post instead of CCD). "
-                   "That contrast is exactly what the A·B test compares.")
 
-view = st.radio(
-    "Mode",
-    [VIEW_A, VIEW_B, VIEW_AB],
-    horizontal=True,
-    key="view_radio",
-    help="A: build a CCD first, then the persona. B: build directly from the post. A·B: build both and compare.",
-)
+    post_text = st.text_area(
+        "Post",
+        key="post_input",
+        height=200,
+        placeholder="Paste any post / self-description here…",
+    )
+    b1, b2 = st.columns(2)
+    with b1:
+        st.button("📄 Sample", on_click=load_sample, use_container_width=True)
+    with b2:
+        build = st.button("✨ Build", type="primary", use_container_width=True)
 
-st.divider()
+    # Mode changed -> current persona is stale
+    if has_persona() and st.session_state.built_view != view:
+        st.session_state.runs = {}
 
-# ===========================================================================
-# Middle: paste post -> build -> save / load / clear / export
-# ===========================================================================
-st.subheader("Paste a post")
-post_text = st.text_area(
-    "Paste a post",
-    key="post_input",
-    height=180,
-    placeholder="Paste any post / self-description here…",
-    label_visibility="collapsed",
-)
+    if build:
+        if not post_text.strip():
+            st.warning("Paste a post first, or click \"Sample\".")
+        else:
+            runs = {}
+            ok = True
+            for kk in VIEW_KEYS[view]:
+                mode = KEY_MODE[kk]
+                try:
+                    with st.spinner(f"Building {KEY_LABEL[kk]}…"):
+                        res = core.build_persona(
+                            mode, post_text,
+                            ccd_prompt=st.session_state.ccd_prompt_edit,
+                            persona_prompt=(st.session_state.persona_ccd_prompt_edit
+                                            if mode == core.MODE_CCD
+                                            else st.session_state.persona_direct_prompt_edit),
+                        )
+                except Exception as e:
+                    st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__}: {e}")
+                    ok = False
+                    break
+                runs[kk] = {
+                    "mode": mode, "system": res["system"], "basis": res["basis"],
+                    "ccd": res["ccd"], "ccd_path": res["ccd_path"], "build_secs": res["build_secs"],
+                    "build_info": res["info"],
+                    "messages": [{"role": "system", "content": res["system"]}],
+                    "chat_history": [],
+                }
+            if ok:
+                st.session_state.runs = runs
+                st.session_state.built_post = post_text
+                st.session_state.built_view = view
+                st.session_state.build_nonce += 1
+                st.rerun()
 
-b1, b2 = st.columns([1, 1])
-with b1:
-    st.button("📄 Load sample post", on_click=load_sample, use_container_width=True)
-with b2:
-    build = st.button("✨ Build / Rebuild Persona", type="primary", use_container_width=True)
-
-# Mode changed -> current persona is stale
-if has_persona() and st.session_state.built_view != view:
-    st.session_state.runs = {}
-
-if build:
-    if not post_text.strip():
-        st.warning("Paste a post first, or click \"Load sample post\".")
+    if has_persona():
+        def _build_summary(kk, run):
+            s = f"{KEY_LABEL[kk]} {run['build_secs']:.1f}s"
+            info = run.get("build_info")
+            if info and info.get("total_tokens"):
+                s += (f" · {info['total_tokens']} tok · "
+                      f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
+            elif info and info.get("cached"):
+                s += " · CCD cached"
+            return s
+        st.success(f"Ready · {st.session_state.built_view}")
+        st.caption(" · ".join(_build_summary(kk, run) for kk, run in st.session_state.runs.items()))
     else:
-        runs = {}
-        ok = True
-        for kk in VIEW_KEYS[view]:
-            mode = KEY_MODE[kk]
-            try:
-                with st.spinner(f"Building {KEY_LABEL[kk]}…"):
-                    res = core.build_persona(
-                        mode, post_text,
-                        ccd_prompt=st.session_state.ccd_prompt_edit,
-                        persona_prompt=(st.session_state.persona_ccd_prompt_edit
-                                        if mode == core.MODE_CCD
-                                        else st.session_state.persona_direct_prompt_edit),
-                    )
-            except Exception as e:
-                st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__}: {e}")
-                ok = False
-                break
-            runs[kk] = {
-                "mode": mode, "system": res["system"], "basis": res["basis"],
-                "ccd": res["ccd"], "ccd_path": res["ccd_path"], "build_secs": res["build_secs"],
-                "build_info": res["info"],
-                "messages": [{"role": "system", "content": res["system"]}],
-                "chat_history": [],
-            }
-        if ok:
-            st.session_state.runs = runs
-            st.session_state.built_post = post_text
-            st.session_state.built_view = view
-            st.session_state.build_nonce += 1
-            st.rerun()
+        st.info("Paste a post, pick a mode, then **Build**.")
 
-if has_persona():
-    def _build_summary(kk, run):
-        s = f"{KEY_LABEL[kk]} {run['build_secs']:.1f}s"
-        info = run.get("build_info")
-        if info and info.get("total_tokens"):
-            s += (f" · {info['total_tokens']} tok · "
-                  f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
-        elif info and info.get("cached"):
-            s += " · CCD cached"
-        return s
-    secs = " · ".join(_build_summary(kk, run) for kk, run in st.session_state.runs.items())
-    st.success(f"Persona ready · {st.session_state.built_view} · {secs}")
-else:
-    st.info("Paste a post, pick a mode, then click \"Build / Rebuild Persona\".")
-
-# --- toolbar: save / clear / export / view source ------------------------
-if has_persona():
-    t1, t2, t3 = st.columns([2, 1, 1])
-    with t1:
+    # --- persona actions: save / clear / export ---
+    if has_persona():
         st.text_input("Save name", key="save_name",
-                      placeholder="Name this persona (leave blank to auto-name)",
+                      placeholder="Name this persona (blank = auto)",
                       label_visibility="collapsed")
-    with t2:
-        st.button("💾 Save", on_click=save_persona, use_container_width=True)
-    with t3:
-        st.button("🧹 Clear chat", on_click=clear_chat, use_container_width=True)
+        a1, a2 = st.columns(2)
+        with a1:
+            st.button("💾 Save", on_click=save_persona, use_container_width=True)
+        with a2:
+            st.button("🧹 Clear", on_click=clear_chat, use_container_width=True)
+        st.download_button(
+            "⬇️ Export chat (.txt)",
+            data=build_export_text(),
+            file_name=f"persona_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
 
-    st.download_button(
-        "⬇️ Export chat (.txt)",
-        data=build_export_text(),
-        file_name=f"persona_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-        mime="text/plain",
-        use_container_width=True,
-    )
-    with st.expander("Source post used"):
-        st.text(st.session_state.built_post)
-
-if st.session_state.saved:
-    labels = [s["label"] for s in st.session_state.saved]
-    l1, l2 = st.columns([3, 1])
-    with l1:
+    if st.session_state.saved:
+        labels = [s["label"] for s in st.session_state.saved]
         st.selectbox("Saved personas", range(len(labels)),
                      format_func=lambda i: f"{labels[i]}  ({st.session_state.saved[i]['view']})",
                      key="load_idx", label_visibility="collapsed")
-    with l2:
         st.button("📂 Load", on_click=load_persona, use_container_width=True)
-    st.caption(f"{len(labels)} saved (this session only; a refresh clears them).")
+        st.caption(f"{len(labels)} saved (session only; refresh clears them).")
 
-st.divider()
+    # --- editable prompts (stacked single column for the narrow sidebar) ---
+    with st.expander("🧩 Edit prompts", expanded=False):
+        st.caption("The real templates sent to the model. Edit, then **Build** to apply (editing the "
+                   "CCD prompt + same post regenerates the CCD). Keep each `{curly}` placeholder.")
+        st.button("↩️ Reset to default", on_click=reset_prompts, use_container_width=True)
+        st.markdown("**① Build CCD** (A) — Beck CCD · `{patient_text}`")
+        st.text_area("CCD construction prompt", key="ccd_prompt_edit", height=160,
+                     label_visibility="collapsed")
+        if "{patient_text}" not in st.session_state.ccd_prompt_edit:
+            st.warning("⚠️ Missing `{patient_text}`.")
+        st.markdown("**② Roleplay from CCD** (A) — `{ccd_text}`")
+        st.text_area("Roleplay-from-CCD prompt", key="persona_ccd_prompt_edit", height=160,
+                     label_visibility="collapsed")
+        if "{ccd_text}" not in st.session_state.persona_ccd_prompt_edit:
+            st.warning("⚠️ Missing `{ccd_text}`.")
+        st.markdown("**③ Roleplay from post** (B) — `{post_text}`")
+        st.text_area("Roleplay-from-post prompt", key="persona_direct_prompt_edit", height=160,
+                     label_visibility="collapsed")
+        if "{post_text}" not in st.session_state.persona_direct_prompt_edit:
+            st.warning("⚠️ Missing `{post_text}`.")
+        st.caption("②③ share the same roleplay rules — only the source differs (CCD vs post). "
+                   "That contrast is what the A·B test compares.")
+
+    with st.expander("📖 How to use", expanded=False):
+        st.markdown("""
+**What this does**: turns a post into a *chattable persona*, and compares two ways of building it.
+
+1. Pick a **Mode** (A / B / A·B).
+2. **Paste a post** or click **Sample**.
+3. Click **Build**.
+4. Chat on the right; each reply shows **⏱ time** and **token/cost**. A·B sends the same message to both.
+5. **💾 Save** to keep it · **⬇️ Export** for a record.
+""")
+
 
 # ===========================================================================
-# Bottom: chat test (two columns in side-by-side mode) + CCD
+# MAIN — pipeline (collapsible) + chat + outputs
 # ===========================================================================
+st.title("Persona Generation Interface")
+
+with st.expander("Method Pipeline (A / B flow) — what each step calls", expanded=not has_persona()):
+    st.markdown(PIPELINE_HTML, unsafe_allow_html=True)
+
 st.subheader("Chat test")
 runs = st.session_state.runs
 keys = list(runs.keys())
 
 if not has_persona():
-    st.info("Build a persona first.")
+    st.info("← Build a persona from the sidebar first.")
 elif len(keys) == 2:
     c = st.columns(2)
     for col, kk in zip(c, keys):
@@ -461,37 +435,36 @@ if user_input:
         run["chat_history"].append(("persona", reply, info))
     st.rerun()
 
-# --- CCD profile (editable) ------------------------------------------------
+# --- outputs: CCD profile (editable) · system prompt · source post ---------
 if has_persona():
-    st.divider()
-    st.subheader("CCD profile (Beck CCD) — editable")
-    a_run = runs.get("A")
-    if a_run and a_run.get("ccd"):
-        if a_run.get("ccd_path"):
-            st.caption(f"📄 {a_run['ccd_path']}")
-        st.caption("Hand-fix the CCD (e.g. if the model misread the post), then apply it — this "
-                   "rebuilds the persona from your edited CCD **without another API call** and clears "
-                   "the Method A chat so the new persona starts fresh.")
-        edited_ccd = st.text_area("CCD (editable)", value=a_run["ccd"], height=340,
-                                  key=f"ccd_edit_{st.session_state.build_nonce}",
-                                  label_visibility="collapsed")
-        if st.button("✅ Apply edited CCD → rebuild Method A persona"):
-            a_run["ccd"] = edited_ccd
-            a_run["system"] = core.persona_system_from_ccd(
-                edited_ccd, st.session_state.persona_ccd_prompt_edit)
-            a_run["messages"] = [{"role": "system", "content": a_run["system"]}]
-            a_run["chat_history"] = []
-            st.success("Persona rebuilt from the edited CCD. Method A chat was reset.")
-            st.rerun()
-    else:
-        st.info("The current view has no Method A (CCD), so there's no CCD profile.")
+    with st.expander("CCD profile (Beck CCD) — editable", expanded=False):
+        a_run = runs.get("A")
+        if a_run and a_run.get("ccd"):
+            if a_run.get("ccd_path"):
+                st.caption(f"📄 {a_run['ccd_path']}")
+            st.caption("Hand-fix the CCD (e.g. if the model misread the post), then apply it — this "
+                       "rebuilds the persona from your edited CCD **without another API call** and "
+                       "clears the Method A chat so the new persona starts fresh.")
+            edited_ccd = st.text_area("CCD (editable)", value=a_run["ccd"], height=340,
+                                      key=f"ccd_edit_{st.session_state.build_nonce}",
+                                      label_visibility="collapsed")
+            if st.button("✅ Apply edited CCD → rebuild Method A persona"):
+                a_run["ccd"] = edited_ccd
+                a_run["system"] = core.persona_system_from_ccd(
+                    edited_ccd, st.session_state.persona_ccd_prompt_edit)
+                a_run["messages"] = [{"role": "system", "content": a_run["system"]}]
+                a_run["chat_history"] = []
+                st.success("Persona rebuilt from the edited CCD. Method A chat was reset.")
+                st.rerun()
+        else:
+            st.info("The current view has no Method A (CCD), so there's no CCD profile.")
 
-# --- Final system prompt actually sent -------------------------------------
-if has_persona():
-    st.divider()
-    st.subheader("Final system prompt sent to the model")
-    st.caption("The prompt template with the placeholder already filled in — this exact text is the "
-               "persona's system message for every reply in the chat above.")
-    for kk, run in runs.items():
-        with st.expander(f"{KEY_LABEL[kk]} — system prompt", expanded=False):
+    with st.expander("Final system prompt sent to the model", expanded=False):
+        st.caption("The template with the placeholder already filled in — this exact text is the "
+                   "persona's system message for every reply above.")
+        for kk, run in runs.items():
+            st.markdown(f"**{KEY_LABEL[kk]}**")
             st.code(run["system"], language="text")
+
+    with st.expander("Source post used", expanded=False):
+        st.text(st.session_state.built_post)
