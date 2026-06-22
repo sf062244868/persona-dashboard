@@ -101,11 +101,11 @@ PIPELINE_HTML = """
     <div class="pp-title a"><span class="tag">A</span>Post-CCD-Chatbox</div>
     <div class="pp-flow">
       <div class="pp-node post"><b>Post</b><small>raw post</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node ccd"><b>CCD</b><small>8-section</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node ccd"><b>CCD</b><small>Beck format</small></div><div class="pp-arrow">→</div>
       <div class="pp-node persona"><b>Persona</b><small>from CCD</small></div><div class="pp-arrow">→</div>
       <div class="pp-node chat"><b>Chatbox</b><small>chat</small></div>
     </div>
-    <span class="pp-cap">Turn the post into an 8-section CCD, then build the persona from the CCD.</span>
+    <span class="pp-cap">Turn the post into a Beck-format CCD, then build the persona from the CCD.</span>
   </div>
   <div class="pp-panel b">
     <div class="pp-title b"><span class="tag">B</span>Direct Post-Chatbox</div>
@@ -268,7 +268,7 @@ with st.expander("📖 How to use (read this first)", expanded=not has_persona()
 **What this tool does**: turns a post / self-description into a *chattable persona*, and lets you compare two ways of generating it.
 
 **Steps**
-1. Pick a **mode**: **Method A** (turn it into an 8-section CCD first) / **Method B** (build directly from the raw text) / **A·B Side-by-side** (build both and compare).
+1. Pick a **mode**: **Method A** (turn it into a Beck-format CCD first) / **Method B** (build directly from the raw text) / **A·B Side-by-side** (build both and compare).
 2. **Paste a post**, or click **"Load sample post"**.
 3. Click **"Build / Rebuild Persona"**.
 4. Chat with the persona in **Chat test** below; each reply shows its **⏱ response time**. In side-by-side mode, the same message goes to both A and B.
@@ -286,8 +286,8 @@ with st.expander("🧩 Show / edit the prompts behind each stage", expanded=Fals
     pc_a, pc_b = st.columns(2)
     with pc_a:
         st.markdown("##### Method A · via CCD")
-        st.markdown("**① Build CCD** — turns the post into an 8-section CCD "
-                    "(Persons, 2008). &nbsp;`{patient_text}` ← the post text.")
+        st.markdown("**① Build CCD** — turns the post into a Beck Cognitive Conceptualization "
+                    "Diagram (Beck, 2020). &nbsp;`{patient_text}` ← the post text.")
         st.text_area("CCD construction prompt", key="ccd_prompt_edit", height=240,
                      label_visibility="collapsed")
         if "{patient_text}" not in st.session_state.ccd_prompt_edit:
@@ -463,7 +463,7 @@ if user_input:
 # --- CCD profile (editable) ------------------------------------------------
 if has_persona():
     st.divider()
-    st.subheader("CCD profile (8 sections) — editable")
+    st.subheader("CCD profile (Beck CCD) — editable")
     a_run = runs.get("A")
     if a_run and a_run.get("ccd"):
         if a_run.get("ccd_path"):

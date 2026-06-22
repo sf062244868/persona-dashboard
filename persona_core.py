@@ -47,20 +47,31 @@ MODE_DIRECT = "Direct Post-Chatbox"
 # Prompts
 # ---------------------------------------------------------------------------
 
-CCD_PROMPT = """You are a clinical psychologist trained in Cognitive Behavioral Therapy and Cognitive Case Conceptualization (Persons, 2008 model).
+CCD_PROMPT = """You are a clinical psychologist trained in Cognitive Behavioral Therapy, using the Beck Institute's traditional Cognitive Conceptualization Diagram (CCD) (Beck, 2020).
 
-Based ONLY on the comments below from one person, build a full CCD. Do not invent facts — only infer from what is written. Flag anything speculative.
+Based ONLY on the text below from one person, build a full Cognitive Conceptualization Diagram. Do not invent facts — only infer from what is written. Flag anything speculative.
 
 Structure your response exactly as:
 
-1. PRESENTING PROBLEMS
-2. AUTOMATIC THOUGHTS
-3. CORE BELIEFS (about self, others, the world)
-4. INTERMEDIATE BELIEFS
-5. COPING BEHAVIORS
-6. TRIGGERS
-7. ORIGINS HYPOTHESIS
-8. STRENGTHS & RESOURCES
+1. RELEVANT LIFE HISTORY & PRECIPITANTS
+   - Formative life history relevant to the current difficulties, and the precipitant(s) of the current episode.
+
+2. CORE BELIEF(S)
+   - The central belief(s) about the self, others, and the world that are active in the current episode.
+
+3. INTERMEDIATE BELIEFS — ASSUMPTIONS / ATTITUDES / RULES
+   - The conditional assumptions, attitudes, and rules that connect the core beliefs to coping.
+
+4. COPING STRATEGIES
+   - The behavioral and cognitive strategies used to manage the core beliefs.
+
+5. CROSS-SECTIONAL SITUATIONS
+   Give up to 3 typical situations drawn from the text. For EACH situation, list:
+   - Situation: the activating event.
+   - Automatic Thought(s): the thought(s) that arose in that situation.
+   - Meaning of the Automatic Thought: what the thought meant about the person (link it to the core belief).
+   - Emotion: the resulting emotion(s).
+   - Behavior: the resulting behavior(s).
 
 ---
 
@@ -243,7 +254,7 @@ def generate_ccd(post_text: str, ccd_prompt: str = None):
         model=MODEL,
         max_tokens=2000,
         messages=[
-            {"role": "system", "content": "You are a clinical psychologist trained in CBT and Cognitive Case Conceptualization."},
+            {"role": "system", "content": "You are a clinical psychologist trained in CBT, using the Beck Institute Cognitive Conceptualization Diagram (Beck, 2020)."},
             {"role": "user", "content": ccd_prompt.format(patient_text=post_text)},
         ],
     )

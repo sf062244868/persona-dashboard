@@ -9,7 +9,7 @@
 Post Selection  →  CCD Processing  →  Persona Construction  →  Chatbox Interaction
 ```
 
-- **CCD Processing**：`generate_ccd(post_text)` → GPT-4o 產出 8 段 CCD（Persons 2008）。
+- **CCD Processing**：`generate_ccd(post_text)` → GPT-4o 產出 Beck CCD（Beck 2020：Life History & Precipitants / Core Beliefs / Intermediate Beliefs / Coping Strategies / 情境 Situation→AT→Meaning→Emotion→Behavior）。
 - **Persona Construction**：`PERSONA_SYSTEM_PROMPT.format(ccd_text=...)` 當 system prompt。
 - **生成依據**：CCD 全文。
 
