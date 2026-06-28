@@ -47,7 +47,7 @@ MODE_DIRECT = "Direct Post-Chatbox"
 # Prompts
 # ---------------------------------------------------------------------------
 
-CCD_PROMPT = """You are a clinical psychologist trained in Cognitive Behavioral Therapy, using the Beck Institute's traditional Cognitive Conceptualization Diagram (CCD) (Beck, 2020).
+BUILD_CCD_PROMPT = """You are a clinical psychologist trained in Cognitive Behavioral Therapy, using the Beck Institute's traditional Cognitive Conceptualization Diagram (CCD) (Beck, 2020).
 
 Based ONLY on the text below from one person, build a full Cognitive Conceptualization Diagram. Do not invent facts — only infer from what is written. Flag anything speculative.
 
@@ -79,7 +79,7 @@ PATIENT DATA:
 {patient_text}
 """
 
-PERSONA_SYSTEM_PROMPT = """You are roleplaying as the person described in the CCD below.
+PERSONA_FROM_CCD_PROMPT = """You are roleplaying as the person described in the CCD below.
 
 Use the CCD as your character sheet. Stay consistent with the person's presentation,
 thought patterns, beliefs, coping style, triggers, strengths, and likely tone.
@@ -98,7 +98,7 @@ CCD:
 {ccd_text}
 """
 
-PERSONA_DIRECT_PROMPT = """You are roleplaying as the person who wrote the post below.
+PERSONA_FROM_POST_PROMPT = """You are roleplaying as the person who wrote the post below.
 
 Use the post as your character sheet. Stay consistent with how this person presents:
 their situation, feelings, thought patterns, coping style, and likely tone.
@@ -117,6 +117,28 @@ POST:
 {post_text}
 """
 
+# 產一段「給人看的」第一人稱 persona 簡介(放進快取檔的 persona_content,介面直接顯示)。
+# 與 roleplay system prompt 不同:這是描述用的 bio,不是角色扮演指令。
+PERSONA_PROFILE_PROMPT = """Based ONLY on the post below, write a short first-person persona profile for the person who wrote it — as if they are briefly introducing themselves.
+
+Rules:
+- 3 to 5 sentences, first person ("I…").
+- Ground every detail in the post (age/gender, situation, feelings, what they're struggling with or happy about). Do not invent facts beyond what's implied.
+- Natural and human, not clinical. No bullet points, no headers.
+- Do not mention Reddit, "the post", or that this is a profile.
+
+Then, on a separate final line, give a short persona name in the form:
+NAME: <a plausible first name> (<age/gender or one-word descriptor from the post>)
+Pick a varied, realistic first name that fits the person's apparent age/gender. Do not default to "Alex".
+
+Return EXACTLY this format:
+BIO: <the first-person paragraph>
+NAME: <name line>
+
+POST:
+{post_text}
+"""
+
 
 # ---------------------------------------------------------------------------
 # Post 資料 + cluster / 全文接口
@@ -124,7 +146,7 @@ POST:
 
 # 來自 Merged_Post_List.md 的 8 個人工 category 與 20 篇 post。
 # ⚠️ flagged=True 的 post(含危機內容)沿用上次規則,排除於 persona 使用。
-POSTS = [
+POST_CATALOG = [
     {"id": 1, "category": "Relationship", "title": "Anxious attachment & text messaging",
      "summary": "Loves getting texts from his girlfriend, but when she takes an hour+ to reply he feels anxious; knows space is healthy but can't stop the negative thoughts.",
      "url": "https://www.reddit.com/r/dating/comments/1ric0tv/anxious_attachment_and_text_messaging", "flagged": False},
@@ -188,20 +210,20 @@ POSTS = [
 ]
 
 # id 17 的全文上次已存在共用資料夾,先映射過去;其餘等之後補進 posts/
-KNOWN_FULL_TEXT = {
+FULL_TEXT_PATHS = {
     17: SHARED / "selected_post_habitchange.txt",
 }
 
 
 def get_post(post_id: int) -> dict:
-    return next((p for p in POSTS if p["id"] == post_id), None)
+    return next((p for p in POST_CATALOG if p["id"] == post_id), None)
 
 
 def load_clusters() -> dict:
     """回傳 {cluster_name: [post, ...]}。Placeholder:用 8 個人工 category。
     換成你們之前的研究方法時只改這裡,維持回傳格式即可。"""
     clusters: dict = {}
-    for post in POSTS:
+    for post in POST_CATALOG:
         clusters.setdefault(post["category"], []).append(post)
     return clusters
 
@@ -211,7 +233,7 @@ def load_post_text(post_id: int) -> str:
     local = POSTS_DIR / f"{post_id}.txt"
     if local.exists():
         return local.read_text(encoding="utf-8")
-    known = KNOWN_FULL_TEXT.get(post_id)
+    known = FULL_TEXT_PATHS.get(post_id)
     if known and known.exists():
         return known.read_text(encoding="utf-8")
     return ""
@@ -225,7 +247,7 @@ def load_post_text(post_id: int) -> str:
 _ccd_cache: dict = {}
 
 
-def _usage(response):
+def _token_usage(response):
     u = getattr(response, "usage", None)
     return {
         "prompt_tokens": getattr(u, "prompt_tokens", None),
@@ -237,12 +259,12 @@ def _usage(response):
 def generate_ccd(post_text: str, ccd_prompt: str = None):
     """回傳 (ccd_text, saved_path, info)。同一篇 post + 同一份 prompt 走快取。
 
-    ccd_prompt: 自訂的 CCD 建構 prompt(含 {patient_text});None 則用預設 CCD_PROMPT。
+    ccd_prompt: 自訂的 CCD 建構 prompt(含 {patient_text});None 則用預設 BUILD_CCD_PROMPT。
     快取 key 同時看 prompt,所以「只改 prompt」也會重新生成(解掉舊版無法重抽的問題)。
 
     info = {latency, cached, prompt_tokens, completion_tokens, total_tokens}
     """
-    ccd_prompt = ccd_prompt or CCD_PROMPT
+    ccd_prompt = ccd_prompt or BUILD_CCD_PROMPT
     key = hashlib.sha256((ccd_prompt + "\x00" + post_text).strip().encode("utf-8")).hexdigest()
     if key in _ccd_cache:
         ccd, path = _ccd_cache[key]
@@ -271,7 +293,7 @@ def generate_ccd(post_text: str, ccd_prompt: str = None):
     out_path = CCD_DIR / f"single_{len(existing) + 1:03d}_ccd.txt"
     out_path.write_text(ccd, encoding="utf-8")
     _ccd_cache[key] = (ccd, str(out_path))
-    info = {"latency": latency, "cached": False, **_usage(response)}
+    info = {"latency": latency, "cached": False, **_token_usage(response)}
     return ccd, str(out_path), info
 
 
@@ -291,11 +313,11 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None, persona_pro
     """
     if mode == MODE_CCD:
         ccd, path, info = generate_ccd(post_text, ccd_prompt)
-        tmpl = persona_prompt or PERSONA_SYSTEM_PROMPT
+        tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
         return {"system": tmpl.format(ccd_text=ccd.strip()),
                 "basis": "CCD", "ccd": ccd, "ccd_path": path,
                 "build_secs": info["latency"], "info": info}
-    tmpl = persona_prompt or PERSONA_DIRECT_PROMPT
+    tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
     return {"system": tmpl.format(post_text=post_text.strip()),
             "basis": "Post", "ccd": None, "ccd_path": None,
             "build_secs": 0.0, "info": None}
@@ -306,8 +328,45 @@ def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None) -> str:
 
     給「手動編輯 CCD 後重建 persona」用:persona_prompt None 則用預設範本。
     """
-    tmpl = persona_prompt or PERSONA_SYSTEM_PROMPT
+    tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
     return tmpl.format(ccd_text=ccd_text.strip())
+
+
+def generate_persona_profile(post_text: str, profile_prompt: str = None):
+    """從 post 產一段第一人稱 persona 簡介 + persona 名稱。回傳 (name, bio, info)。
+
+    給「預先算 persona 快取檔」用的 persona_content(bio) 與 persona_name。
+    info = {latency, prompt_tokens, completion_tokens, total_tokens}
+    """
+    profile_prompt = profile_prompt or PERSONA_PROFILE_PROMPT
+    t0 = time.perf_counter()
+    response = get_client().chat.completions.create(
+        model=MODEL,
+        max_tokens=400,
+        messages=[
+            {"role": "system", "content": "You write concise, grounded first-person persona profiles."},
+            {"role": "user", "content": profile_prompt.format(post_text=post_text)},
+        ],
+    )
+    latency = time.perf_counter() - t0
+    text = (response.choices[0].message.content or "").strip()
+    if not text:
+        finish = getattr(response.choices[0], "finish_reason", "unknown")
+        raise ValueError(f"The model returned no persona profile (finish_reason={finish}).")
+
+    # 解析 BIO: / NAME: 兩段;格式跑掉時退而求其全文當 bio。
+    name, bio = "", ""
+    for line in text.splitlines():
+        s = line.strip()
+        if s.upper().startswith("NAME:"):
+            name = s.split(":", 1)[1].strip()
+        elif s.upper().startswith("BIO:"):
+            bio = s.split(":", 1)[1].strip()
+        elif bio and not s.upper().startswith("NAME:"):
+            bio += (" " + s if s else "")
+    bio = (bio or text).strip()
+    info = {"latency": latency, **_token_usage(response)}
+    return name, bio, info
 
 
 def chat_once(messages: list):
@@ -319,4 +378,4 @@ def chat_once(messages: list):
     response = get_client().chat.completions.create(model=MODEL, messages=messages)
     latency = time.perf_counter() - t0
     reply = response.choices[0].message.content
-    return reply, {"latency": latency, **_usage(response)}
+    return reply, {"latency": latency, **_token_usage(response)}

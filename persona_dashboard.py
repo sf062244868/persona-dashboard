@@ -2,12 +2,12 @@
 persona_dashboard.py — Persona Generation Interface
 ===================================================
 
-Top-down layout + slide styling, with A·B side-by-side comparison,
+Top-down layout + slide styling, single-method result view,
 per-reply timing, and chat export.
 
-  Top     Two method pipelines (cards, collapse after build) + tutorial + mode (A / B / A·B)
+  Top     Two method pipelines (cards, collapse after build) + tutorial + mode (A / B)
   Middle  Paste post / load sample -> Build -> Save / Load / Clear / Export / view source
-  Bottom  Chat test (two columns in side-by-side mode) + CCD profile
+  Bottom  Chat test (single column) + CCD profile
 
 Backend lives in persona_core.py. To plug in your own clustering / post source later,
 only change load_clusters() / load_post_text() there.
@@ -16,55 +16,23 @@ Run:    streamlit run persona_dashboard.py
 Needs:  OPENAI_API_KEY in .env (local) or Streamlit secrets (cloud)
 """
 
-import os
 from datetime import datetime
 
 import streamlit as st
 
 st.set_page_config(page_title="Persona Generation Interface", layout="wide")
 
+from ui_common import ensure_openai_key, check_password  # noqa: E402
 
-def _secret(key, default=None):
-    """Read Streamlit secrets first (cloud), then environment variables (local .env)."""
-    try:
-        if key in st.secrets:
-            return st.secrets[key]
-    except Exception:
-        pass
-    return os.environ.get(key, default)
-
-
-_key = _secret("OPENAI_API_KEY")
-if _key:
-    os.environ["OPENAI_API_KEY"] = str(_key).strip()
-
-
-def _check_password() -> bool:
-    app_pw = _secret("APP_PASSWORD")
-    if not app_pw:
-        return True
-    if st.session_state.get("auth_ok"):
-        return True
-    st.title("Persona Generation Interface")
-    pw = st.text_input("Enter access password", type="password")
-    if pw:
-        if pw == str(app_pw):
-            st.session_state.auth_ok = True
-            st.rerun()
-        else:
-            st.error("Wrong password.")
-    st.stop()
-
-
-_check_password()
+ensure_openai_key()
+check_password()
 
 import persona_core as core  # noqa: E402
 
-# Three view modes -> run keys to build ('A' = Method A/CCD, 'B' = Method B/Direct)
+# Two view modes -> run key to build ('A' = Method A/CCD, 'B' = Method B/Direct)
 VIEW_A = "Method A (Post-CCD)"
 VIEW_B = "Method B (Direct)"
-VIEW_AB = "A·B Side-by-side"
-VIEW_KEYS = {VIEW_A: ["A"], VIEW_B: ["B"], VIEW_AB: ["A", "B"]}
+VIEW_KEYS = {VIEW_A: ["A"], VIEW_B: ["B"]}
 KEY_MODE = {"A": core.MODE_CCD, "B": core.MODE_DIRECT}
 KEY_LABEL = {"A": "Method A · via CCD", "B": "Method B · direct post"}
 
@@ -129,11 +97,11 @@ _defaults = {
     "built_post": "",
     "built_view": None,
     "saved": [],
-    "build_nonce": 0,      # bumped on each build, so the editable CCD box re-syncs to the new CCD
+    "build_counter": 0,      # bumped on each build, so the editable CCD box re-syncs to the new CCD
     # editable prompt templates (default to persona_core's; user can tweak in the UI)
-    "ccd_prompt_edit": core.CCD_PROMPT,
-    "persona_ccd_prompt_edit": core.PERSONA_SYSTEM_PROMPT,
-    "persona_direct_prompt_edit": core.PERSONA_DIRECT_PROMPT,
+    "build_ccd_prompt_edit": core.BUILD_CCD_PROMPT,
+    "persona_from_ccd_prompt_edit": core.PERSONA_FROM_CCD_PROMPT,
+    "persona_from_post_prompt_edit": core.PERSONA_FROM_POST_PROMPT,
 }
 for k, v in _defaults.items():
     st.session_state.setdefault(k, v)
@@ -149,9 +117,9 @@ def load_sample():
 
 
 def reset_prompts():
-    st.session_state.ccd_prompt_edit = core.CCD_PROMPT
-    st.session_state.persona_ccd_prompt_edit = core.PERSONA_SYSTEM_PROMPT
-    st.session_state.persona_direct_prompt_edit = core.PERSONA_DIRECT_PROMPT
+    st.session_state.build_ccd_prompt_edit = core.BUILD_CCD_PROMPT
+    st.session_state.persona_from_ccd_prompt_edit = core.PERSONA_FROM_CCD_PROMPT
+    st.session_state.persona_from_post_prompt_edit = core.PERSONA_FROM_POST_PROMPT
 
 
 def clear_chat():
@@ -199,7 +167,7 @@ def _cost(prompt_tokens, completion_tokens) -> float:
     return ((prompt_tokens or 0) * PRICE_IN + (completion_tokens or 0) * PRICE_OUT) / 1_000_000
 
 
-def _meta_bits(info: dict) -> list:
+def _meta_chips(info: dict) -> list:
     """Turn one latency/token info dict into short display chips."""
     bits = []
     if info.get("latency"):
@@ -231,7 +199,7 @@ def build_export_text() -> str:
             who = "You" if role == "you" else "Persona"
             tag = ""
             if info:
-                bits = _meta_bits(info)
+                bits = _meta_chips(info)
                 if bits:
                     tag = f" ({', '.join(b.replace('⏱ ', '').replace('🔢 ', '') for b in bits)})"
             lines.append(f"{who}{tag}: {text}")
@@ -244,10 +212,10 @@ def render_transcript(run):
         with st.chat_message("user" if role == "you" else "assistant"):
             st.write(text)
             if role != "you" and info:
-                bits = _meta_bits(info)
+                bits = _meta_chips(info)
                 if bits:
                     st.caption(" · ".join(bits))
-    # cumulative totals for this run (handy for the A·B comparison)
+    # cumulative totals for this run
     turns = [info for role, _, info in run["chat_history"] if role != "you" and info]
     if turns:
         tot_tok = sum(i.get("total_tokens") or 0 for i in turns)
@@ -264,9 +232,9 @@ with st.sidebar:
 
     view = st.radio(
         "Mode",
-        [VIEW_A, VIEW_B, VIEW_AB],
+        [VIEW_A, VIEW_B],
         key="view_radio",
-        help="A: build a CCD first, then the persona. B: build directly from the post. A·B: build both and compare.",
+        help="A: build a CCD first, then the persona. B: build directly from the post.",
     )
 
     post_text = st.text_area(
@@ -297,10 +265,10 @@ with st.sidebar:
                     with st.spinner(f"Building {KEY_LABEL[kk]}…"):
                         res = core.build_persona(
                             mode, post_text,
-                            ccd_prompt=st.session_state.ccd_prompt_edit,
-                            persona_prompt=(st.session_state.persona_ccd_prompt_edit
+                            ccd_prompt=st.session_state.build_ccd_prompt_edit,
+                            persona_prompt=(st.session_state.persona_from_ccd_prompt_edit
                                             if mode == core.MODE_CCD
-                                            else st.session_state.persona_direct_prompt_edit),
+                                            else st.session_state.persona_from_post_prompt_edit),
                         )
                 except Exception as e:
                     st.error(f"Failed to build {KEY_LABEL[kk]}: {type(e).__name__}: {e}")
@@ -317,7 +285,7 @@ with st.sidebar:
                 st.session_state.runs = runs
                 st.session_state.built_post = post_text
                 st.session_state.built_view = view
-                st.session_state.build_nonce += 1
+                st.session_state.build_counter += 1
                 st.rerun()
 
     if has_persona():
@@ -367,31 +335,31 @@ with st.sidebar:
                    "CCD prompt + same post regenerates the CCD). Keep each `{curly}` placeholder.")
         st.button("↩️ Reset to default", on_click=reset_prompts, use_container_width=True)
         st.markdown("**① Build CCD** (A) — Beck CCD · `{patient_text}`")
-        st.text_area("CCD construction prompt", key="ccd_prompt_edit", height=160,
+        st.text_area("CCD construction prompt", key="build_ccd_prompt_edit", height=160,
                      label_visibility="collapsed")
-        if "{patient_text}" not in st.session_state.ccd_prompt_edit:
+        if "{patient_text}" not in st.session_state.build_ccd_prompt_edit:
             st.warning("⚠️ Missing `{patient_text}`.")
         st.markdown("**② Roleplay from CCD** (A) — `{ccd_text}`")
-        st.text_area("Roleplay-from-CCD prompt", key="persona_ccd_prompt_edit", height=160,
+        st.text_area("Roleplay-from-CCD prompt", key="persona_from_ccd_prompt_edit", height=160,
                      label_visibility="collapsed")
-        if "{ccd_text}" not in st.session_state.persona_ccd_prompt_edit:
+        if "{ccd_text}" not in st.session_state.persona_from_ccd_prompt_edit:
             st.warning("⚠️ Missing `{ccd_text}`.")
         st.markdown("**③ Roleplay from post** (B) — `{post_text}`")
-        st.text_area("Roleplay-from-post prompt", key="persona_direct_prompt_edit", height=160,
+        st.text_area("Roleplay-from-post prompt", key="persona_from_post_prompt_edit", height=160,
                      label_visibility="collapsed")
-        if "{post_text}" not in st.session_state.persona_direct_prompt_edit:
+        if "{post_text}" not in st.session_state.persona_from_post_prompt_edit:
             st.warning("⚠️ Missing `{post_text}`.")
         st.caption("②③ share the same roleplay rules — only the source differs (CCD vs post). "
-                   "That contrast is what the A·B test compares.")
+                   "Pick Method A or B to choose which one builds the persona.")
 
     with st.expander("📖 How to use", expanded=False):
         st.markdown("""
-**What this does**: turns a post into a *chattable persona*, and compares two ways of building it.
+**What this does**: turns a post into a *chattable persona*, built one of two ways.
 
-1. Pick a **Mode** (A / B / A·B).
+1. Pick a **Mode** (A: via CCD · B: direct from post).
 2. **Paste a post** or click **Sample**.
 3. Click **Build**.
-4. Chat on the right; each reply shows **⏱ time** and **token/cost**. A·B sends the same message to both.
+4. Chat on the right; each reply shows **⏱ time** and **token/cost**.
 5. **💾 Save** to keep it · **⬇️ Export** for a record.
 """)
 
@@ -410,17 +378,12 @@ keys = list(runs.keys())
 
 if not has_persona():
     st.info("← Build a persona from the sidebar first.")
-elif len(keys) == 2:
-    c = st.columns(2)
-    for col, kk in zip(c, keys):
-        with col:
-            st.markdown(f"**{KEY_LABEL[kk]}**")
-            render_transcript(runs[kk])
 else:
+    st.markdown(f"**{KEY_LABEL[keys[0]]}**")
     render_transcript(runs[keys[0]])
 
 user_input = st.chat_input(
-    "Say something (side-by-side sends to both A and B)…" if has_persona() else "Build a persona first",
+    "Say something…" if has_persona() else "Build a persona first",
     disabled=not has_persona(),
 )
 if user_input:
@@ -446,12 +409,12 @@ if has_persona():
                        "rebuilds the persona from your edited CCD **without another API call** and "
                        "clears the Method A chat so the new persona starts fresh.")
             edited_ccd = st.text_area("CCD (editable)", value=a_run["ccd"], height=340,
-                                      key=f"ccd_edit_{st.session_state.build_nonce}",
+                                      key=f"ccd_edit_{st.session_state.build_counter}",
                                       label_visibility="collapsed")
             if st.button("✅ Apply edited CCD → rebuild Method A persona"):
                 a_run["ccd"] = edited_ccd
                 a_run["system"] = core.persona_system_from_ccd(
-                    edited_ccd, st.session_state.persona_ccd_prompt_edit)
+                    edited_ccd, st.session_state.persona_from_ccd_prompt_edit)
                 a_run["messages"] = [{"role": "system", "content": a_run["system"]}]
                 a_run["chat_history"] = []
                 st.success("Persona rebuilt from the edited CCD. Method A chat was reset.")

@@ -30,7 +30,7 @@ def test_build_persona_direct_no_api():
 
 
 def test_build_persona_ccd_monkeypatched(monkeypatch):
-    def fake_generate_ccd(post_text):
+    def fake_generate_ccd(post_text, ccd_prompt=None):
         info = {"latency": 1.23, "cached": True,
                 "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
         return "FAKE-CCD-BODY", "/tmp/fake_ccd.txt", info
