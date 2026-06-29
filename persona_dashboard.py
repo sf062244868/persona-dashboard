@@ -29,6 +29,7 @@ check_password()
 
 import persona_core as core   # noqa: E402
 import cluster_api            # noqa: E402
+import persona_store          # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 PERSONAS_FILE = HERE / "personas.json"
@@ -386,38 +387,25 @@ def render_build():
 # ===========================================================================
 # TAB 2 — Persona Library
 # ===========================================================================
-def render_library():
-    personas = load_personas()
-    source_posts = load_source_posts()
-    st.caption("16 pre-computed personas from Felix's selected posts (8 themes × 2). "
-               "Selecting one never re-calls the LLM; only chat does.")
+_SOURCE_BADGE = {"curated": "🌱 seed", "cluster-search": "🔎 added"}
 
-    if not personas:
-        st.warning("`personas.json` not found. Run `python build_personas.py` first.")
-        return
 
-    cL, cR = st.columns([3, 2])
-    with cL:
-        idx = st.selectbox(
-            "Persona", range(len(personas)),
-            format_func=lambda i: f"{i + 1:>2}. {personas[i]['persona_name']} — "
-                                  f"{personas[i]['cluster']} · {personas[i]['subreddit']}",
-            key="lib_idx")
-    with cR:
-        method = st.radio("Roleplay basis", ["A", "B"], horizontal=True,
-                          format_func=lambda m: "A · via CCD" if m == "A" else "B · direct post",
-                          key="lib_method",
-                          help="Which cached system prompt drives the chat.")
+def render_persona_panel(rec, key_prefix, source_posts=None):
+    """共用的 persona 視圖 + 聊天(Library 與 Cluster Search 都用這個)。"""
+    method = st.radio("Roleplay basis", ["A", "B"], horizontal=True,
+                      format_func=lambda m: "A · via CCD" if m == "A" else "B · direct post",
+                      key=f"{key_prefix}_method",
+                      help="Which cached system prompt drives the chat.")
+    system_prompt = rec["method_a"]["persona_system"] if method == "A" else rec["method_b"]["persona_system"]
 
-    p = personas[idx]
-    system_prompt = p["method_a"]["persona_system"] if method == "A" else p["method_b"]["persona_system"]
+    badge = _SOURCE_BADGE.get(rec.get("source", "curated"), rec.get("source", ""))
+    st.markdown(f"### {rec['persona_name']}  <small style='color:#5b6b7a'>{badge}</small>",
+                unsafe_allow_html=True)
+    st.caption(f"{rec.get('cluster_group', '')} → **{rec.get('cluster', '')}** · {rec.get('subreddit', '')} · "
+               f"[source post]({rec.get('source_url', '')})")
+    st.info(rec["persona_content"])
 
-    st.markdown(f"### {p['persona_name']}")
-    st.caption(f"{p['cluster_group']} → **{p['cluster']}** · {p['subreddit']} · "
-               f"[source post]({p['source_url']})")
-    st.info(p["persona_content"])
-
-    chat_key = f"lib_chat_{p['source_post_id']}_{method}"
+    chat_key = f"{key_prefix}_chat_{rec['source_post_id']}_{method}"
     if chat_key not in st.session_state:
         st.session_state[chat_key] = {"messages": [{"role": "system", "content": system_prompt}],
                                       "history": []}
@@ -427,11 +415,11 @@ def render_library():
     for role, text in thread["history"]:
         with st.chat_message("user" if role == "you" else "assistant"):
             st.write(text)
-    if st.button("🧹 Reset chat", key="lib_reset"):
+    if st.button("🧹 Reset chat", key=f"{key_prefix}_reset"):
         st.session_state[chat_key] = {"messages": [{"role": "system", "content": system_prompt}],
                                       "history": []}
         st.rerun()
-    user_input = st.chat_input("Say something to this persona…", key="lib_chat_input")
+    user_input = st.chat_input("Say something to this persona…", key=f"{key_prefix}_chat_input")
     if user_input:
         thread["messages"].append({"role": "user", "content": user_input})
         try:
@@ -444,14 +432,34 @@ def render_library():
         st.rerun()
 
     with st.expander("Source post"):
-        src = source_posts.get(p["source_post_id"])
-        st.markdown(f"**{p['title']}**")
-        st.text(src["content"] if src else "(source post text not found)")
-    if p["method_a"].get("ccd"):
+        src = (source_posts or {}).get(rec["source_post_id"])
+        st.markdown(f"**{rec['title']}**")
+        st.text(src["content"] if src else "(full text not stored for this one — see the source link)")
+    if rec["method_a"].get("ccd"):
         with st.expander("CCD profile (Method A · Beck CCD)"):
-            st.text(p["method_a"]["ccd"])
+            st.text(rec["method_a"]["ccd"])
     with st.expander("System prompt in use (cached)"):
         st.code(system_prompt, language="text")
+
+
+def render_library():
+    personas = load_personas()
+    source_posts = load_source_posts()
+    n_seed = sum(1 for p in personas if p.get("source", "curated") == "curated")
+    n_added = len(personas) - n_seed
+    st.caption(f"{len(personas)} personas in the library ({n_seed} seed · {n_added} added via Cluster Search). "
+               "Selecting one never re-calls the LLM; only chat does.")
+
+    if not personas:
+        st.warning("`personas.json` not found. Run `python build_personas.py` first.")
+        return
+
+    idx = st.selectbox(
+        "Persona", range(len(personas)),
+        format_func=lambda i: f"{i + 1:>2}. {_SOURCE_BADGE.get(personas[i].get('source','curated'),'')} "
+                              f"{personas[i]['persona_name']} — {personas[i]['cluster']} · {personas[i]['subreddit']}",
+        key="lib_idx")
+    render_persona_panel(personas[idx], "lib", source_posts)
 
 
 # ===========================================================================
@@ -522,23 +530,28 @@ def render_cluster():
     with st.expander("Post body", expanded=True):
         st.write(post["body"])
 
-    st.markdown("Feeds this post's `prompt` into `persona_core.generate_ccd()`.")
-    if st.button("🧠 Generate CCD for this post", type="primary", key="cs_gen"):
+    st.markdown("Runs the **same** pipeline as the library: this post → Beck CCD → persona → profile.")
+    if st.button("🧠 Generate persona", type="primary", key="cs_gen"):
         try:
-            with st.spinner("Running CCD inference (gpt-4o)…"):
-                ccd, _path, info = core.generate_ccd(post["prompt"])
-            st.session_state.setdefault("cs_ccd", {})[post["url"]] = {"ccd": ccd, "info": info}
+            with st.spinner("Building persona (gpt-4o: CCD + profile)…"):
+                rec = core.build_persona_record(
+                    post_id=core.reddit_post_id(post["url"], post["prompt"]),
+                    subreddit=post["subreddit"], title=post["title"],
+                    content=post["prompt"], url=post["url"],
+                    cluster=c["name"], cluster_group=c["name"], source="cluster-search")
+            st.session_state.setdefault("cs_persona", {})[post["url"]] = rec
         except Exception as e:
-            st.error(f"CCD inference failed: {type(e).__name__}: {e}")
+            st.error(f"Persona build failed: {type(e).__name__}: {e}")
 
-    cached = st.session_state.get("cs_ccd", {}).get(post["url"])
-    if cached:
-        info = cached["info"]
-        if info and info.get("total_tokens"):
-            st.caption(f"⏱ {info.get('latency', 0):.1f}s · 🔢 {info['total_tokens']} tok")
-        elif info and info.get("cached"):
-            st.caption("served from CCD cache (no API call)")
-        st.text(cached["ccd"])
+    rec = st.session_state.get("cs_persona", {}).get(post["url"])
+    if rec:
+        st.divider()
+        render_persona_panel(rec, "cs")
+        if st.button("💾 Save to Library", key="cs_save",
+                     help="Append this persona to personas.json (commit + push to reach the cloud)."):
+            added, msg = persona_store.append_persona(rec)
+            load_personas.clear()   # 讓 Library 立刻看到新存的
+            (st.success if added else st.info)(msg)
 
 
 # ===========================================================================

@@ -10,6 +10,7 @@ load_post_text() 即可,其餘不動。
 """
 
 import os
+import re
 import time
 import hashlib
 from pathlib import Path
@@ -367,6 +368,47 @@ def generate_persona_profile(post_text: str, profile_prompt: str = None):
     bio = (bio or text).strip()
     info = {"latency": latency, **_token_usage(response)}
     return name, bio, info
+
+
+def reddit_post_id(url: str, fallback_text: str = "") -> str:
+    """從 reddit comments URL 抽 base36 id;抽不到就用內容短 hash 當穩定 id。"""
+    m = re.search(r"/comments/([a-z0-9]+)", url or "")
+    if m:
+        return m.group(1)
+    return "h" + hashlib.sha256((fallback_text or url or "").encode("utf-8")).hexdigest()[:10]
+
+
+def build_persona_record(post_id: str, subreddit: str, title: str, content: str, url: str,
+                         cluster: str = "", cluster_group: str = "",
+                         persona_id=None, source: str = "curated") -> dict:
+    """一篇 post → 一個完整 persona record(會打 gpt-4o)。
+
+    批次(build_personas.py 的 16 篇)與即時(Cluster Search)共用這唯一一份邏輯,
+    所以兩條路徑產出的 CCD/persona 格式完全一致(CCD 永遠是 Beck 5 段)。
+    回傳結構與 personas.json 的紀錄相同(多一個 source 欄)。
+    """
+    ccd, _path, ccd_info = generate_ccd(content)
+    system_a = persona_system_from_ccd(ccd)
+    system_b = build_persona(MODE_DIRECT, content)["system"]
+    name, bio, prof_info = generate_persona_profile(content)
+    return {
+        "persona_id": persona_id,
+        "persona_name": name or f"{cluster or subreddit} persona",
+        "persona_content": bio,
+        "subreddit": subreddit,
+        "cluster_group": cluster_group or cluster,
+        "cluster": cluster,
+        "source_post_id": post_id,
+        "source_url": url,
+        "title": title,
+        "content_hash": hashlib.sha256(content.strip().encode("utf-8")).hexdigest(),
+        "method_a": {"ccd": ccd, "persona_system": system_a},
+        "method_b": {"persona_system": system_b},
+        "gen": {"model": MODEL,
+                "ccd_tokens": ccd_info.get("total_tokens"),
+                "profile_tokens": prof_info.get("total_tokens")},
+        "source": source,
+    }
 
 
 def chat_once(messages: list):

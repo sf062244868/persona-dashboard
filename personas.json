@@ -30,7 +30,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1265,
         "profile_tokens": 668
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 2,
@@ -54,7 +55,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1185,
         "profile_tokens": 640
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 3,
@@ -78,7 +80,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1155,
         "profile_tokens": 605
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 4,
@@ -102,7 +105,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1154,
         "profile_tokens": 577
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 5,
@@ -126,7 +130,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1265,
         "profile_tokens": 640
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 6,
@@ -150,7 +155,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1229,
         "profile_tokens": 698
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 7,
@@ -174,7 +180,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1149,
         "profile_tokens": 552
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 8,
@@ -198,7 +205,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1154,
         "profile_tokens": 582
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 9,
@@ -222,7 +230,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1074,
         "profile_tokens": 601
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 10,
@@ -246,7 +255,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1022,
         "profile_tokens": 481
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 11,
@@ -270,7 +280,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1194,
         "profile_tokens": 595
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 12,
@@ -294,7 +305,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1269,
         "profile_tokens": 622
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 13,
@@ -318,7 +330,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1280,
         "profile_tokens": 656
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 14,
@@ -342,7 +355,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1320,
         "profile_tokens": 662
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 15,
@@ -366,7 +380,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1074,
         "profile_tokens": 486
-      }
+      },
+      "source": "curated"
     },
     {
       "persona_id": 16,
@@ -390,7 +405,8 @@
         "model": "gpt-4o",
         "ccd_tokens": 1201,
         "profile_tokens": 545
-      }
+      },
+      "source": "curated"
     }
   ]
 }

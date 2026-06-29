@@ -47,39 +47,16 @@ def load_existing() -> dict:
 
 
 def build_one(post: dict, idx: int) -> dict:
-    """一篇 post → 一個完整 persona record(會打 API)。"""
-    text = post["content"]
+    """一篇 post → 一個完整 persona record(會打 API)。
 
-    # Method A: post → CCD → persona system prompt
-    ccd, ccd_path, ccd_info = core.generate_ccd(text)
-    system_a = core.persona_system_from_ccd(ccd)
-
-    # Method B: post → persona system prompt(template fill,不打 API)
-    res_b = core.build_persona(core.MODE_DIRECT, text)
-    system_b = res_b["system"]
-
-    # 第一人稱 persona 簡介 + 名稱(打 API)
-    name, bio, prof_info = core.generate_persona_profile(text)
-
-    return {
-        "persona_id": idx,
-        "persona_name": name or f"{post['cluster']} persona {idx}",
-        "persona_content": bio,
-        "subreddit": post["subreddit"],
-        "cluster_group": post["cluster_group"],
-        "cluster": post["cluster"],
-        "source_post_id": post["post_id"],
-        "source_url": post["url"],
-        "title": post["title"],
-        "content_hash": content_hash(text),
-        "method_a": {"ccd": ccd, "persona_system": system_a},
-        "method_b": {"persona_system": system_b},
-        "gen": {
-            "model": core.MODEL,
-            "ccd_tokens": ccd_info.get("total_tokens"),
-            "profile_tokens": prof_info.get("total_tokens"),
-        },
-    }
+    與即時 Cluster Search 共用 core.build_persona_record(),保證格式一致。
+    """
+    return core.build_persona_record(
+        post_id=post["post_id"], subreddit=post["subreddit"], title=post["title"],
+        content=post["content"], url=post["url"],
+        cluster=post["cluster"], cluster_group=post["cluster_group"],
+        persona_id=idx, source="curated",
+    )
 
 
 def _first_name(name: str) -> str:
