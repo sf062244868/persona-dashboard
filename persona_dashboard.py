@@ -14,6 +14,7 @@ Needs: OPENAI_API_KEY (.env locally / Streamlit secrets on cloud).
        Cluster Search also needs the ClusterSearch API (default http://localhost:8000).
 """
 
+import re
 import json
 from datetime import datetime
 from pathlib import Path
@@ -390,6 +391,34 @@ def render_build():
 _SOURCE_BADGE = {"curated": "🌱 seed", "cluster-search": "🔎 added"}
 
 
+def sim_bar(sim: float, width: int = 10) -> str:
+    blocks = max(1, min(width, round((sim or 0) * width)))
+    return "█" * blocks + "░" * (width - blocks)
+
+
+def chips_html(items) -> str:
+    return " ".join(
+        f"<span style='background:#d6f0ec;color:#0f766e;border-radius:999px;"
+        f"padding:1px 9px;font-size:11px;margin-right:4px;white-space:nowrap'>{k}</span>"
+        for k in items)
+
+
+def render_ccd_sections(ccd: str):
+    """把 Beck CCD 拆成 5 段折疊卡片(抓不到分段就退回整段純文字)。"""
+    parts = re.split(r"(?m)^\s*(\d\.\s+[^\n]+?)\s*$", ccd)
+    if len(parts) <= 1:
+        with st.expander("CCD profile (Beck)"):
+            st.text(ccd)
+        return
+    if parts[0].strip():
+        st.caption(parts[0].strip())
+    for i in range(1, len(parts), 2):
+        head = parts[i].strip()
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
+        with st.expander(head):
+            st.markdown(body if body else "_(empty)_")
+
+
 def render_persona_panel(rec, key_prefix, source_posts=None):
     """共用的 persona 視圖 + 聊天(Library 與 Cluster Search 都用這個)。"""
     method = st.radio("Roleplay basis", ["A", "B"], horizontal=True,
@@ -436,8 +465,8 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
         st.markdown(f"**{rec['title']}**")
         st.text(src["content"] if src else "(full text not stored for this one — see the source link)")
     if rec["method_a"].get("ccd"):
-        with st.expander("CCD profile (Method A · Beck CCD)"):
-            st.text(rec["method_a"]["ccd"])
+        st.markdown("**CCD profile (Beck · 5 sections)**")
+        render_ccd_sections(rec["method_a"]["ccd"])
     with st.expander("System prompt in use (cached)"):
         st.code(system_prompt, language="text")
 
@@ -506,7 +535,8 @@ def render_cluster():
                     with st.spinner("Calling /pick…"):
                         st.session_state.cs_pick = cluster_api.pick(
                             cluster_id=clusters[ci]["id"], n=n, override=api_url)
-                    st.session_state.pop("cs_ccd", None)
+                    st.session_state.cs_post_sel = 0
+                    st.session_state.pop("cs_persona", None)
                 except Exception as e:
                     st.error(f"/pick failed: {e}")
 
@@ -516,42 +546,61 @@ def render_cluster():
         return
 
     c = pick["cluster"]
-    st.markdown(f"### Cluster: {c['name']}")
-    st.caption(f"keywords: {', '.join(c['keywords'])} · {c['n_matches']} posts above threshold "
-               f"{c['sim_threshold']} · showing top {len(pick['posts'])}")
-
     posts = pick["posts"]
-    sel = st.selectbox("Post", range(len(posts)),
-                       format_func=lambda i: f"#{posts[i]['rank']} · sim {posts[i]['similarity']:.3f} · "
-                                             f"r/{posts[i]['subreddit']} · {posts[i]['title'][:55]}",
-                       key="cs_post_i")
-    post = posts[sel]
-    st.markdown(f"**{post['title']}**  ·  [source]({post['url']})  ·  {post['word_count']} words")
-    with st.expander("Post body", expanded=True):
-        st.write(post["body"])
+    st.markdown(f"### Cluster: {c['name']}")
+    st.markdown(chips_html(c["keywords"]), unsafe_allow_html=True)
+    st.caption(f"{c['n_matches']} posts above threshold {c['sim_threshold']} · showing top {len(posts)}")
 
-    st.markdown("Runs the **same** pipeline as the library: this post → Beck CCD → persona → profile.")
-    if st.button("🧠 Generate persona", type="primary", key="cs_gen"):
-        try:
-            with st.spinner("Building persona (gpt-4o: CCD + profile)…"):
-                rec = core.build_persona_record(
-                    post_id=core.reddit_post_id(post["url"], post["prompt"]),
-                    subreddit=post["subreddit"], title=post["title"],
-                    content=post["prompt"], url=post["url"],
-                    cluster=c["name"], cluster_group=c["name"], source="cluster-search")
-            st.session_state.setdefault("cs_persona", {})[post["url"]] = rec
-        except Exception as e:
-            st.error(f"Persona build failed: {type(e).__name__}: {e}")
+    sel = st.session_state.get("cs_post_sel", 0)
+    if sel >= len(posts):
+        sel = 0
 
-    rec = st.session_state.get("cs_persona", {}).get(post["url"])
-    if rec:
-        st.divider()
-        render_persona_panel(rec, "cs")
-        if st.button("💾 Save to Library", key="cs_save",
-                     help="Append this persona to personas.json (commit + push to reach the cloud)."):
-            added, msg = persona_store.append_persona(rec)
-            load_personas.clear()   # 讓 Library 立刻看到新存的
-            (st.success if added else st.info)(msg)
+    left, right = st.columns([2, 3], gap="medium")
+
+    # --- left: scannable post list ---
+    with left:
+        st.markdown("**Matched posts** — pick one")
+        for i, p in enumerate(posts):
+            picked = (i == sel)
+            st.markdown(f"{'▶ ' if picked else ''}**#{p['rank']}** `{sim_bar(p['similarity'])}` "
+                        f"{p['similarity']:.2f}  ·  r/{p['subreddit']}")
+            st.caption(p["title"][:80])
+            if not picked:
+                if st.button("選這篇", key=f"cs_sel_{i}", use_container_width=True):
+                    st.session_state.cs_post_sel = i
+                    st.rerun()
+            st.divider()
+
+    # --- right: selected post + persona ---
+    with right:
+        post = posts[sel]
+        st.markdown(f"**{post['title']}**  ·  [source]({post['url']})  ·  {post['word_count']} words  ·  "
+                    f"sim {post['similarity']:.3f}")
+        with st.expander("Post body", expanded=True):
+            st.write(post["body"])
+
+        st.caption("Runs the **same** pipeline as the library: post → Beck CCD → persona → profile.")
+        if st.button("🧠 Generate persona", type="primary", key="cs_gen"):
+            try:
+                with st.spinner("Building persona (gpt-4o: CCD + profile)…"):
+                    rec = core.build_persona_record(
+                        post_id=core.reddit_post_id(post["url"], post["prompt"]),
+                        subreddit=post["subreddit"], title=post["title"],
+                        content=post["prompt"], url=post["url"],
+                        cluster=c["name"], cluster_group=c["name"], source="cluster-search")
+                st.session_state.setdefault("cs_persona", {})[post["url"]] = rec
+            except Exception as e:
+                st.error(f"Persona build failed: {type(e).__name__}: {e}")
+
+        rec = st.session_state.get("cs_persona", {}).get(post["url"])
+        if rec:
+            st.divider()
+            render_persona_panel(rec, "cs")
+            if st.button("💾 Save to Library", key="cs_save",
+                         help="Append to personas.json (commit + push to reach the cloud)."):
+                added, msg = persona_store.append_persona(rec)
+                load_personas.clear()
+                (st.success if added else st.info)(msg)
 
 
 # ===========================================================================
