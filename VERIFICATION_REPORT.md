@@ -21,15 +21,17 @@ Felix API: `meetings/2026-06-30-week3/ClusterSearch-API` (branch `Ray`).
 
 ---
 
-## 1. 🔗 Public demo URL (remote stays on)
-**App (all three tabs): https://creek-effect-affects-regions.trycloudflare.com**
+## 1. 🔗 Public demo URL (remote stays on) — PASSWORD PROTECTED
+**App (all three tabs): https://prev-proper-oval-clarke.trycloudflare.com**
+**Password: `persona-b50307`** (asked once; set via `APP_PASSWORD` in `shared/.env`, gitignored).
 
-- Verified: `GET /` → HTTP 200, `/_stcore/health` → `ok` through the tunnel.
+- The trycloudflare URL is **ephemeral** — it changes if the tunnel/remote restarts. Re-run `/home/ray/ray/cloudflared tunnel --url http://localhost:8501` to get a fresh one.
+- Verified: `GET /` → HTTP 200 (password screen) through the tunnel; gate confirmed (AppTest: password input shown, tabs not rendered until correct password).
 - Why everything works here (unlike Streamlit Cloud): the Streamlit **server runs on the remote**, same machine as the Felix API and the OpenAI key (`shared/.env`). All LLM calls and all `/pick` calls happen **server-side on the remote**, so:
   - 🛠 Build → works (server has the key)
   - 📚 Persona Library → works (reads `personas.json`)
   - 🔎 Cluster Search → **works** (server calls `localhost:8000` internally — no public API needed)
-- ⚠️ **Security/cost:** this URL is public and unauthenticated; using it spends the real OpenAI key. The trycloudflare subdomain is random/obscure and the tunnel is ephemeral. **Take it down when not demoing:** `pkill -f "cloudflared tunnel"`.
+- 🔒 **Security/cost:** the app is now **password-gated** (`APP_PASSWORD`), so the public URL can stay up safely — visitors can't use it (and can't spend the OpenAI key) without the password. Still good hygiene: set an OpenAI monthly spend cap and rotate the previously-exposed key. Only the app port `:8501` is forwarded (not the machine). To fully stop exposure: `pkill -f "cloudflared tunnel"`.
 - Processes kept alive on the remote: `uvicorn api:app`(:8000), `streamlit run persona_dashboard.py`(:8501), `cloudflared tunnel`.
 - Coordinator's parallel track (commit `2bea023`): exposing the **API** via **ngrok** so the *Streamlit Cloud* app can reach it (`CLUSTERSEARCH_API_URL` = ngrok URL). That is a different path to the same end; `cluster_api.py` now sends `ngrok-skip-browser-warning` + a non-browser UA so ngrok returns clean JSON.
 

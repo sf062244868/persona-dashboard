@@ -6,8 +6,17 @@ persona_dashboard.py(Build 工具)與 pages/(Persona Library)共用,避免重複
 """
 
 import os
+from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
+
+# Load .env BEFORE any check_password()/ensure_openai_key() so APP_PASSWORD and
+# OPENAI_API_KEY from shared/.env are visible at startup (persona_core also loads
+# these later, but the password gate runs first).
+_HERE = Path(__file__).resolve().parent
+load_dotenv(_HERE / ".env")
+load_dotenv(_HERE.parent.parent / "shared" / ".env")
 
 
 def secret(key, default=None):
