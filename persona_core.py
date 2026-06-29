@@ -370,6 +370,45 @@ def generate_persona_profile(post_text: str, profile_prompt: str = None):
     return name, bio, info
 
 
+# ---------------------------------------------------------------------------
+# Quality gate (used by the Cluster Search candidate flow)
+# ---------------------------------------------------------------------------
+CRISIS_PATTERNS = [
+    r"suicid", r"kill myself", r"killing myself", r"end my life", r"end it all",
+    r"self[\s-]?harm", r"cut myself", r"cutting myself", r"want to die", r"wanna die",
+    r"no reason to live", r"don'?t want to (be alive|live)", r"overdose", r"take my (own )?life",
+]
+
+
+def safety_flag(text: str) -> bool:
+    """True 表示文中疑似危機內容(自殺/自傷)。給 persona 生成前的安全標記用。"""
+    t = (text or "").lower()
+    return any(re.search(p, t) for p in CRISIS_PATTERNS)
+
+
+def filter_pick_posts(posts: list, min_words: int = 30):
+    """品質閘門:過濾 /pick 回傳的候選 post。
+
+    - 丟掉字數 < min_words 的(過短)
+    - 依「正規化標題」去重(同質/轉貼)
+    - 每篇加上 safety_flag(危機內容)欄,不丟掉、只標記
+    回傳 (kept, dropped_short, dropped_dup)。
+    """
+    kept, seen = [], set()
+    dropped_short = dropped_dup = 0
+    for p in posts:
+        if (p.get("word_count") or 0) < min_words:
+            dropped_short += 1
+            continue
+        key = re.sub(r"[^a-z0-9]+", " ", (p.get("title") or "").lower()).strip()
+        if key and key in seen:
+            dropped_dup += 1
+            continue
+        seen.add(key)
+        kept.append({**p, "safety_flag": safety_flag(f"{p.get('title','')} {p.get('body','')}")})
+    return kept, dropped_short, dropped_dup
+
+
 def reddit_post_id(url: str, fallback_text: str = "") -> str:
     """從 reddit comments URL 抽 base36 id;抽不到就用內容短 hash 當穩定 id。"""
     m = re.search(r"/comments/([a-z0-9]+)", url or "")
@@ -408,6 +447,7 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
                 "ccd_tokens": ccd_info.get("total_tokens"),
                 "profile_tokens": prof_info.get("total_tokens")},
         "source": source,
+        "safety_flag": safety_flag(content),
     }
 
 

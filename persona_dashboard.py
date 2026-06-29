@@ -546,10 +546,17 @@ def render_cluster():
         return
 
     c = pick["cluster"]
-    posts = pick["posts"]
+    posts, dropped_short, dropped_dup = core.filter_pick_posts(pick["posts"])
     st.markdown(f"### Cluster: {c['name']}")
     st.markdown(chips_html(c["keywords"]), unsafe_allow_html=True)
-    st.caption(f"{c['n_matches']} posts above threshold {c['sim_threshold']} · showing top {len(posts)}")
+    drop_note = (f" · quality gate dropped {dropped_short} short + {dropped_dup} dup"
+                 if (dropped_short or dropped_dup) else "")
+    st.caption(f"{c['n_matches']} above threshold {c['sim_threshold']} · "
+               f"{len(posts)} after quality gate{drop_note}")
+    if not posts:
+        st.warning("All returned posts were filtered out by the quality gate (too short / duplicate). "
+                   "Try a larger n or another cluster.")
+        return
 
     sel = st.session_state.get("cs_post_sel", 0)
     if sel >= len(posts):
@@ -562,7 +569,8 @@ def render_cluster():
         st.markdown("**Matched posts** — pick one")
         for i, p in enumerate(posts):
             picked = (i == sel)
-            st.markdown(f"{'▶ ' if picked else ''}**#{p['rank']}** `{sim_bar(p['similarity'])}` "
+            flag = " ⚠️" if p.get("safety_flag") else ""
+            st.markdown(f"{'▶ ' if picked else ''}**#{p['rank']}**{flag} `{sim_bar(p['similarity'])}` "
                         f"{p['similarity']:.2f}  ·  r/{p['subreddit']}")
             st.caption(p["title"][:80])
             if not picked:
@@ -576,6 +584,9 @@ def render_cluster():
         post = posts[sel]
         st.markdown(f"**{post['title']}**  ·  [source]({post['url']})  ·  {post['word_count']} words  ·  "
                     f"sim {post['similarity']:.3f}")
+        if post.get("safety_flag"):
+            st.warning("⚠️ This post may contain crisis content (self-harm / suicidal ideation). "
+                       "Review carefully before generating a persona for research use.")
         with st.expander("Post body", expanded=True):
             st.write(post["body"])
 
