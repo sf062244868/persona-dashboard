@@ -23,7 +23,7 @@ Felix API: `meetings/2026-06-30-week3/ClusterSearch-API` (branch `Ray`).
 
 ## 1. 🔗 Public demo URL (remote stays on) — PASSWORD PROTECTED
 **App (all three tabs): https://prev-proper-oval-clarke.trycloudflare.com**
-**Password: `persona-b50307`** (asked once; set via `APP_PASSWORD` in `shared/.env`, gitignored).
+**Password:** set as `APP_PASSWORD` in `shared/.env` (gitignored) — value is NOT committed; coordinator was told it directly.
 
 - The trycloudflare URL is **ephemeral** — it changes if the tunnel/remote restarts. Re-run `/home/ray/ray/cloudflared tunnel --url http://localhost:8501` to get a fresh one.
 - Verified: `GET /` → HTTP 200 (password screen) through the tunnel; gate confirmed (AppTest: password input shown, tabs not rendered until correct password).
