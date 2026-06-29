@@ -19,6 +19,16 @@ import urllib.error
 
 DEFAULT_BASE_URL = "http://localhost:8000"
 
+# When the API is exposed through an ngrok free tunnel, the first request from a
+# browser-like client gets an HTML interstitial warning page instead of JSON,
+# which breaks json.loads. The "ngrok-skip-browser-warning" header bypasses it,
+# and a non-browser User-Agent stops the interstitial from triggering at all.
+# These headers are harmless against a plain/local API or a cloudflared tunnel.
+_COMMON_HEADERS = {
+    "ngrok-skip-browser-warning": "true",
+    "User-Agent": "cluster-api-client/1.0",
+}
+
 
 def base_url(override: str = None) -> str:
     url = override or os.environ.get("CLUSTERSEARCH_API_URL") or DEFAULT_BASE_URL
@@ -26,7 +36,8 @@ def base_url(override: str = None) -> str:
 
 
 def _get(path: str, override: str = None, timeout: int = 30):
-    req = urllib.request.Request(base_url(override) + path, method="GET")
+    req = urllib.request.Request(base_url(override) + path, method="GET",
+                                 headers=dict(_COMMON_HEADERS))
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8"))
 
@@ -34,7 +45,7 @@ def _get(path: str, override: str = None, timeout: int = 30):
 def _post(path: str, payload: dict, override: str = None, timeout: int = 120):
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(base_url(override) + path, data=data, method="POST",
-                                 headers={"Content-Type": "application/json"})
+                                 headers={**_COMMON_HEADERS, "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8"))
