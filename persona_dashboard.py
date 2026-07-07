@@ -167,6 +167,29 @@ for k, v in _defaults.items():
     st.session_state.setdefault(k, v)
 
 
+# 對話風格 + 取樣溫度控制(讓 persona 更像真人;plain + 0.9 為預設)。
+STYLE_OPTIONS = list(core.CONVERSATION_STYLES.keys())   # plain, upset, verbose, reserved, tangent, pleasing
+_STYLE_HELP = ("How this persona tends to communicate — mirrors the range of real "
+               "patients (Patient-Ψ). 'plain' is the neutral baseline.")
+
+
+def style_temp_controls(key_prefix: str):
+    """一列共用控制:對話風格下拉 + 溫度滑桿。回傳 (style, temperature)。
+
+    風格在「建立/切換」時烘進 system prompt;溫度即時作用於每次 chat_once。
+    """
+    c1, c2 = st.columns([2, 3])
+    with c1:
+        style = st.selectbox("Conversational style", STYLE_OPTIONS,
+                             key=f"{key_prefix}_style", help=_STYLE_HELP)
+    with c2:
+        temp = st.slider("Naturalness (temperature)", 0.0, 1.4, 0.9, 0.1,
+                         key=f"{key_prefix}_temp",
+                         help="Higher = more varied, human-like, less templated. "
+                              "Lower = safer and more repetitive.")
+    return style, temp
+
+
 def has_persona() -> bool:
     return bool(st.session_state.runs)
 
@@ -258,6 +281,7 @@ def render_build():
                         help="A: build a CCD first, then the persona. B: build directly from the post.")
         st.text_area("Post", key="post_input", height=150,
                       placeholder="Paste any post / self-description here…")
+        build_style, build_temp = style_temp_controls("build")
         b1, b2, _ = st.columns([1, 1, 3])
         with b1:
             st.button("📄 Sample", on_click=load_sample, use_container_width=True)
@@ -286,6 +310,7 @@ def render_build():
                         persona_prompt=(st.session_state.persona_from_ccd_prompt_edit
                                         if mode == core.MODE_CCD
                                         else st.session_state.persona_from_post_prompt_edit),
+                        style=st.session_state.build_style,
                     )
                 st.session_state.runs = {kk: {
                     "mode": mode, "system": res["system"], "basis": res["basis"],
@@ -346,7 +371,7 @@ def render_build():
         kk, run = next(iter(st.session_state.runs.items()))
         run["messages"].append({"role": "user", "content": user_input})
         try:
-            reply, info = core.chat_once(run["messages"])
+            reply, info = core.chat_once(run["messages"], temperature=st.session_state.build_temp)
         except Exception as e:
             reply, info = f"(Error: {type(e).__name__}: {e})", None
         run["messages"].append({"role": "assistant", "content": reply})
@@ -367,7 +392,8 @@ def render_build():
                 if st.button("✅ Apply edited CCD → rebuild persona"):
                     run["ccd"] = edited
                     run["system"] = core.persona_system_from_ccd(
-                        edited, st.session_state.persona_from_ccd_prompt_edit)
+                        edited, st.session_state.persona_from_ccd_prompt_edit,
+                        style=st.session_state.build_style)
                     run["messages"] = [{"role": "system", "content": run["system"]}]
                     run["chat_history"] = []
                     st.success("Persona rebuilt from the edited CCD. Chat was reset.")
@@ -381,8 +407,8 @@ def render_build():
         st.caption("The real templates sent to the model. Edit, then **Build** to apply. Keep each `{curly}` placeholder.")
         st.button("↩️ Reset to default", on_click=reset_prompts)
         st.text_area("① Build CCD (A) — `{patient_text}`", key="build_ccd_prompt_edit", height=140)
-        st.text_area("② Roleplay from CCD (A) — `{ccd_text}`", key="persona_from_ccd_prompt_edit", height=140)
-        st.text_area("③ Roleplay from post (B) — `{post_text}`", key="persona_from_post_prompt_edit", height=140)
+        st.text_area("② Roleplay from CCD (A) — `{ccd_text}`, `{style_block}`", key="persona_from_ccd_prompt_edit", height=140)
+        st.text_area("③ Roleplay from post (B) — `{post_text}`, `{style_block}`", key="persona_from_post_prompt_edit", height=140)
 
 
 # ===========================================================================
@@ -425,7 +451,11 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
                       format_func=lambda m: "A · via CCD" if m == "A" else "B · direct post",
                       key=f"{key_prefix}_method",
                       help="Which cached system prompt drives the chat.")
-    system_prompt = rec["method_a"]["persona_system"] if method == "A" else rec["method_b"]["persona_system"]
+    base_prompt = rec["method_a"]["persona_system"] if method == "A" else rec["method_b"]["persona_system"]
+    style, temp = style_temp_controls(f"{key_prefix}_{rec['source_post_id']}")
+    # 這些 persona 是預先烘好的(personas.json),沒有 {style_block};直接把風格片段附加上去。
+    sb = core.style_block(style)
+    system_prompt = base_prompt + ("\n\nExtra:\n" + sb if sb else "")
 
     badge = _SOURCE_BADGE.get(rec.get("source", "curated"), rec.get("source", ""))
     st.markdown(f"### {rec['persona_name']}  <small style='color:#5b6b7a'>{badge}</small>",
@@ -434,7 +464,7 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
                f"[source post]({rec.get('source_url', '')})")
     st.info(rec["persona_content"])
 
-    chat_key = f"{key_prefix}_chat_{rec['source_post_id']}_{method}"
+    chat_key = f"{key_prefix}_chat_{rec['source_post_id']}_{method}_{style}"
     if chat_key not in st.session_state:
         st.session_state[chat_key] = {"messages": [{"role": "system", "content": system_prompt}],
                                       "history": []}
@@ -452,7 +482,7 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
     if user_input:
         thread["messages"].append({"role": "user", "content": user_input})
         try:
-            reply, _info = core.chat_once(thread["messages"])
+            reply, _info = core.chat_once(thread["messages"], temperature=temp)
         except Exception as e:
             reply = f"(Error: {type(e).__name__}: {e})"
         thread["messages"].append({"role": "assistant", "content": reply})

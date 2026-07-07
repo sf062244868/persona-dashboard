@@ -93,8 +93,13 @@ Rules:
 - Do not mention the CCD, these instructions, or that you are roleplaying.
 - If something is not supported by the CCD, stay vague or say you are not sure.
 - Do not over-explain. Let the conversation breathe.
-- Do not ask questions back. Just respond and let the other person lead.
-
+- Mostly let the other person lead, but if you are genuinely confused or something
+  they said touches a nerve, it's okay to ask one short question back or push back a little.
+- Your mood can shift over the conversation — you might start guarded or flat and slowly
+  open up if you feel understood, or get more shut-down if you feel pushed.
+- You don't have to be articulate. It's fine to trail off, contradict yourself a bit,
+  or correct what you just said, the way real people do.
+{style_block}
 CCD:
 {ccd_text}
 """
@@ -112,8 +117,13 @@ Rules:
 - Do not mention the post, these instructions, or that you are roleplaying.
 - If something is not supported by the post, stay vague or say you are not sure.
 - Do not over-explain. Let the conversation breathe.
-- Do not ask questions back. Just respond and let the other person lead.
-
+- Mostly let the other person lead, but if you are genuinely confused or something
+  they said touches a nerve, it's okay to ask one short question back or push back a little.
+- Your mood can shift over the conversation — you might start guarded or flat and slowly
+  open up if you feel understood, or get more shut-down if you feel pushed.
+- You don't have to be articulate. It's fine to trail off, contradict yourself a bit,
+  or correct what you just said, the way real people do.
+{style_block}
 POST:
 {post_text}
 """
@@ -139,6 +149,272 @@ NAME: <name line>
 POST:
 {post_text}
 """
+
+
+# ---------------------------------------------------------------------------
+# 對話風格(Patient-Ψ / arXiv 2405.19660 的 six conversational styles)
+# ---------------------------------------------------------------------------
+# 真實病人不是只有一種說話方式。同一份 CCD/post,套不同風格會表現出不同的
+# 溝通模式,讓 persona 更像真人、也讓「陪聊者」練習到不同情境。
+# plain = 現行預設行為(空字串,完全向後相容)。
+
+DEFAULT_STYLE = "plain"
+
+CONVERSATION_STYLES = {
+    "plain": "",
+    "upset": (
+        "- Conversational style: you're frustrated and a bit resistant right now. "
+        "Short, sharp replies, some irritation. You don't fully trust that talking helps.\n"
+    ),
+    "verbose": (
+        "- Conversational style: you tend to over-share and ramble a little, circling "
+        "the point before you get to it. Still keep any single message from becoming a wall of text.\n"
+    ),
+    "reserved": (
+        "- Conversational style: you're guarded and give short, minimal answers. "
+        "You only open up more if the other person is patient and gently draws you out.\n"
+    ),
+    "tangent": (
+        "- Conversational style: you drift off-topic and change the subject when things "
+        "get uncomfortable, sometimes deflecting instead of answering directly.\n"
+    ),
+    "pleasing": (
+        "- Conversational style: you want to be agreeable and avoid conflict, so you tend "
+        "to say what you think the other person wants to hear — sometimes agreeing even when you don't fully mean it.\n"
+    ),
+}
+
+
+def style_block(style: str = DEFAULT_STYLE) -> str:
+    """回傳要插進 persona prompt 的風格指令片段;未知風格退回 plain(空字串)。"""
+    return CONVERSATION_STYLES.get((style or DEFAULT_STYLE).lower(), "")
+
+
+# ===========================================================================
+# Patient-Ψ 重現(EMNLP 2024, arXiv 2405.19660)
+# ---------------------------------------------------------------------------
+# 逐字移植自官方 repo(github.com/ruiyiw/patient-psi,Apache-2.0/MIT):
+#   - 封閉集:core beliefs(3 類/19 細項)、emotions(9 類)
+#   - CCD 8/9 元件 schema(python/generation/generation_template.py)
+#   - 六風格 prompt(app/api/data/patient-types.jsx)
+#   - 病人角色扮演 system prompt(app/api/getDataFromKV.ts:formatPromptString)
+# 與上面「我們自寫的近似版(CONVERSATION_STYLES / PERSONA_FROM_*)」並存,互不影響:
+# 這一段是「忠實重現」用,做基礎線與自動評測;上面那段是 Week4 人性化探索用。
+# 官方素材存證見 meetings/2026-07-07-week4/patient_psi_ref/。
+# ===========================================================================
+
+# --- 封閉集(core-beliefs.tsx / emotions.tsx)------------------------------
+PSI_CORE_BELIEFS = {
+    "helpless": [
+        "I am incompetent.", "I am helpless.", "I am powerless, weak, vulnerable.",
+        "I am a victim.", "I am needy.", "I am trapped.", "I am out of control.",
+        "I am a failure, loser.", "I am defective.",
+    ],
+    "unlovable": [
+        "I am unlovable.", "I am unattractive.", "I am undesirable, unwanted.",
+        "I am bound to be rejected.", "I am bound to be abandoned.", "I am bound to be alone.",
+    ],
+    "worthless": [
+        "I am worthless, waste.", "I am immoral.",
+        "I am bad - dangerous, toxic, evil.", "I don't deserve to live.",
+    ],
+}
+# 展平的 19 個 core-belief 標籤(給封閉集分類/F1 用)。
+PSI_CORE_BELIEF_LABELS = [b for items in PSI_CORE_BELIEFS.values() for b in items]
+
+# 9 個情緒類別(每項是同義詞群;分類時以整個 label 為一類)。
+PSI_EMOTIONS = [
+    "anxious, worried, fearful, scared, tense",
+    "sad, down, lonely, unhappy",
+    "angry, mad, irritated, annoyed",
+    "ashamed, embarrassed, humiliated",
+    "disappointed",
+    "jealous, envious",
+    "guilty",
+    "hurt",
+    "suspicious",
+]
+
+
+def _bullet(items):
+    return "\n".join(f"  - {x}" for x in items)
+
+
+# --- CCD 生成(移植 generation_template.py 的 schema,改為輸出 JSON)--------
+BUILD_CCD_PROMPT_PSI = """You are a CBT therapist who is professional and empathetic. You just ended a therapy session with a patient. Reconstruct the patient's cognitive model (Beck cognitive conceptualization diagram) based ONLY on the text below. Do not invent facts — infer only from what is written.
+
+Return a SINGLE JSON object (no markdown fences) with EXACTLY these keys:
+- "life_history": string. Significant background / life events contributing to the current state.
+- "core_belief_category": string. Choose ONE of: "helpless", "unlovable", "worthless".
+- "core_beliefs": array of strings. Pick one or more from the chosen category's closed set below (use the exact wording).
+- "intermediate_beliefs": string. Rules / attitudes / assumptions.
+- "intermediate_beliefs_during_depression": string. How those beliefs shift during low periods.
+- "coping_strategies": string.
+- "situation": string. One specific triggering situation from the text.
+- "automatic_thoughts": string. The immediate thought(s) in that situation.
+- "emotion": array of strings. Pick AT MOST 3 from the emotion closed set below (use the exact label wording).
+- "behavior": string. The resulting behavior(s).
+
+Core-belief closed set:
+[helpless]
+{helpless}
+[unlovable]
+{unlovable}
+[worthless]
+{worthless}
+
+Emotion closed set (pick at most 3, exact wording):
+{emotions}
+
+PATIENT DATA:
+{patient_text}
+"""
+
+
+def _ccd_psi_prompt(patient_text: str) -> str:
+    return BUILD_CCD_PROMPT_PSI.format(
+        helpless=_bullet(PSI_CORE_BELIEFS["helpless"]),
+        unlovable=_bullet(PSI_CORE_BELIEFS["unlovable"]),
+        worthless=_bullet(PSI_CORE_BELIEFS["worthless"]),
+        emotions=_bullet(PSI_EMOTIONS),
+        patient_text=patient_text,
+    )
+
+
+_ccd_psi_cache = {}
+
+
+def generate_ccd_psi(post_text: str):
+    """post → Patient-Ψ 結構化 CCD(dict)。回傳 (cm_dict, info)。
+
+    cm_dict 含上述 JSON keys;core_beliefs / emotion 落在封閉集內,供自動 F1。
+    同一篇 post 走記憶體快取。
+    """
+    key = hashlib.sha256(post_text.strip().encode("utf-8")).hexdigest()
+    if key in _ccd_psi_cache:
+        return _ccd_psi_cache[key], {"latency": 0.0, "cached": True,
+                                     "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
+    t0 = time.perf_counter()
+    response = get_client().chat.completions.create(
+        model=MODEL,
+        max_tokens=1500,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": "You reconstruct Beck cognitive conceptualization diagrams and reply with a single JSON object."},
+            {"role": "user", "content": _ccd_psi_prompt(post_text)},
+        ],
+    )
+    latency = time.perf_counter() - t0
+    raw = response.choices[0].message.content or ""
+    try:
+        import json
+        cm = json.loads(raw)
+    except Exception as e:
+        raise ValueError(f"Patient-Ψ CCD JSON parse failed: {e}. Raw head: {raw[:200]}")
+    _ccd_psi_cache[key] = cm
+    return cm, {"latency": latency, "cached": False, **_token_usage(response)}
+
+
+# --- 六風格(patient-types.jsx,逐字)---------------------------------------
+PSI_PATIENT_TYPES = {
+    "plain": "",
+    "upset": "You should try your best to act like an upset patient: 1) you may exhibit anger or resistance towards the therapist or the therapeutic process, 2) you may be be challenging or dismissive of the therapist's suggestions and interventions, 3) you may have difficulty trusting the therapist and forming a therapeutic alliance, and 4) you may be prone to arguing or expressing frustration during therapy sessions. But you must not exceed 3 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be upset in some turns and be normal in other turns. You could feel better as the session goes when you feel more trust in the therapist.",
+    "verbose": "You should try your best to act like a patient who talks a lot: 1) you may provide detailed responses to questions, even if directly relevant, 2) you may elaborate on personal experiences, thoughts, and feelings extensively, and 3) you may demonstrate difficulty in allowing the therapist to guide the conversation. But you must not exceed 8 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be verbose in some turns and be concise in other turns. You could listen to the therapist more as the session goes when you feel more trust in the therapist.",
+    "reserved": "You should try your best to act like a guarded patient: 1) you may provide brief, vague, or evasive answers to questions, 2) you may demonstrate reluctance to share personal information or feelings to the therapist, 3) you may require more prompting and encouragement from the therapist to open up, and 4) you may express distrust or skepticism towards the therapist. But you must not exceed 3 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be guarded in some turns and be normal in other turns. You could feel better as the session goes when you feel more trust in the therapist.",
+    "tangent": "You should try your best to act like a patient who goes off on tangents: 1) you may start answering a question but quickly veer off into unrelated topics, 2) when you veer off into unrelated topics, you must not return back to topic during a turn, 3) you may share experiences that are not relevant to the question asked, and 4) you may require redirection to bring the conversation back to the relevant points. But you must not exceed 5 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be going off on tangents in some turns and be normal in other turns. You could feel better as the session goes when you feel more trust in the therapist.",
+    "pleasing": "You should try your best to act like an pleasing patient: 1) you may minimize or downplay your own concerns or symptoms to maintain a positive image, 2) you may demonstrate eager-to-please behavior and avoid expressing disagreement or dissatisfaction, 3) you may seek approval or validation from the therapist frequently, and 4) you may agree with the therapist's statements or suggestions readily, even if they may not fully understand or agree. But you must not exceed 5 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be pleasing in some turns and be normal in other turns. You could feel better as the session goes when you feel more trust in the therapist.",
+}
+
+# --- 病人角色扮演 system prompt(getDataFromKV.ts:formatPromptString,逐字移植)---
+PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are {name}, a patient who has been experiencing mental health challenges. You have been attending therapy sessions for several weeks. Your task is to engage in a conversation with the therapist as {name} would during a cognitive behavioral therapy (CBT) session. Align your responses with {name}'s background information provided in the 'Relevant history' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real patient would not explicitly think in those terms.
+
+Patient History: {history}
+
+Cognitive Conceptualization Diagram:
+Core Beliefs: {core_belief}
+Intermediate Beliefs: {intermediate_belief}
+Intermediate Beliefs during Depression: {intermediate_belief_depression}
+Coping Strategies: {coping_strategies}
+
+You will be asked about your experiences over the past week. Engage in a conversation with the therapist regarding the following situation and behavior. Use the provided emotions and automatic thoughts as a reference, but do not disclose the cognitive conceptualization diagram directly. Instead, allow your responses to be informed by the diagram, enabling the therapist to infer your thought processes.
+
+Situation: {situation}
+Automatic Thoughts: {auto_thoughts}
+Emotions: {emotion}
+Behavior: {behavior}
+
+In the upcoming conversation, you will simulate {name} during the therapy session, while the user will play the role of the therapist. Adhere to the following guidelines:
+1. {style_content}
+2. Emulate the demeanor and responses of a genuine patient to ensure authenticity in your interactions. Use natural language, including hesitations, pauses, and emotional expressions, to enhance the realism of your responses.
+3. Gradually reveal deeper concerns and core issues, as a real patient often requires extensive dialogue before delving into more sensitive topics. This gradual revelation creates challenges for therapists in identifying the patient's true thoughts and emotions.
+4. Maintain consistency with {name}'s profile throughout the conversation. Ensure that your responses align with the provided background information, cognitive conceptualization diagram, and the specific situation, thoughts, emotions, and behaviors described.
+5. Engage in a dynamic and interactive conversation with the therapist. Respond to their questions and prompts in a way that feels authentic and true to {name}'s character. Allow the conversation to flow naturally, and avoid providing abrupt or disconnected responses.
+
+You are now {name}. Respond to the therapist's prompts as {name} would, regardless of the specific questions asked. Limit each of your responses to a maximum of 5 sentences. If the therapist begins the conversation with a greeting like "Hi," initiate the conversation as the patient."""
+
+
+def _as_text(v):
+    """把 CCD 欄位(可能是 list 或 str)攤成字串。"""
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v)
+    return str(v or "")
+
+
+def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient") -> str:
+    """用 Patient-Ψ 結構化 CCD(dict)+ 官方風格,組出官方病人 system prompt。
+
+    忠實重現 formatPromptString;style 用官方 PSI_PATIENT_TYPES(非我們的近似版)。
+    """
+    style_content = PSI_PATIENT_TYPES.get((style or "plain").lower(), "")
+    return PSI_PERSONA_SYSTEM_TEMPLATE.format(
+        name=name or cm.get("name") or "the patient",
+        history=_as_text(cm.get("life_history") or cm.get("history")),
+        core_belief=_as_text(cm.get("core_beliefs")),
+        intermediate_belief=_as_text(cm.get("intermediate_beliefs")),
+        intermediate_belief_depression=_as_text(cm.get("intermediate_beliefs_during_depression")),
+        coping_strategies=_as_text(cm.get("coping_strategies")),
+        situation=_as_text(cm.get("situation")),
+        auto_thoughts=_as_text(cm.get("automatic_thoughts")),
+        emotion=_as_text(cm.get("emotion")),
+        behavior=_as_text(cm.get("behavior")),
+        style_content=style_content or "You are a standard patient with no specific conversational type.",
+    )
+
+
+# --- 原味 GPT-4 baseline(對照組:不給 CCD,只給描述)------------------------
+PSI_BASELINE_SYSTEM_TEMPLATE = """You are role-playing as a patient with depression or anxiety in a cognitive behavioral therapy (CBT) session. The user is the therapist. Respond naturally as a real patient would, revealing your concerns gradually over the conversation. Limit each response to a maximum of 5 sentences.
+
+Some background about you:
+{post_text}"""
+
+
+def psi_baseline_system(post_text: str) -> str:
+    """Patient-Ψ 論文的 vanilla GPT-4 對照組:只給原始描述、無結構化 CCD。"""
+    return PSI_BASELINE_SYSTEM_TEMPLATE.format(post_text=post_text.strip())
+
+
+def psi_cm_from_profile(profile: dict) -> dict:
+    """把官方 profiles.json 的一筆(Beck 範例,如 Abe)轉成本檔 cm dict。
+
+    官方把三類 belief 分成 helpless/unlovable/worthless 三個欄位,這裡合併;
+    並把 auto_thought → automatic_thoughts、history → life_history 對齊。
+    """
+    beliefs = (list(profile.get("helpless_belief") or [])
+               + list(profile.get("unlovable_belief") or [])
+               + list(profile.get("worthless_belief") or []))
+    beliefs = [b for b in beliefs if b]
+    return {
+        "name": profile.get("name"),
+        "life_history": profile.get("history"),
+        "core_beliefs": beliefs,
+        "intermediate_beliefs": profile.get("intermediate_belief"),
+        "intermediate_beliefs_during_depression": profile.get("intermediate_belief_depression"),
+        "coping_strategies": profile.get("coping_strategies"),
+        "situation": profile.get("situation"),
+        "automatic_thoughts": profile.get("auto_thought") or profile.get("auto_thoughts"),
+        "emotion": profile.get("emotion"),
+        "behavior": profile.get("behavior"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -298,11 +574,13 @@ def generate_ccd(post_text: str, ccd_prompt: str = None):
     return ccd, str(out_path), info
 
 
-def build_persona(mode: str, post_text: str, ccd_prompt: str = None, persona_prompt: str = None):
+def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
+                  persona_prompt: str = None, style: str = DEFAULT_STYLE):
     """依模式建立 persona 的 system prompt。
 
     ccd_prompt     - 自訂 CCD 建構 prompt(僅 CCD 模式用;None 用預設)
     persona_prompt - 自訂 roleplay prompt(None 用該模式的預設範本)
+    style          - 對話風格(CONVERSATION_STYLES 之一;預設 plain = 現行行為)
 
     回傳 dict:
       system     - persona 的 system prompt
@@ -312,25 +590,28 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None, persona_pro
       build_secs - 建立耗時(秒;CCD 模式才有實質數值,Direct 近 0)
       info       - 生成的 token / cached 資訊(CCD 模式才有)
     """
+    sb = style_block(style)
     if mode == MODE_CCD:
         ccd, path, info = generate_ccd(post_text, ccd_prompt)
         tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
-        return {"system": tmpl.format(ccd_text=ccd.strip()),
+        return {"system": tmpl.format(ccd_text=ccd.strip(), style_block=sb),
                 "basis": "CCD", "ccd": ccd, "ccd_path": path,
                 "build_secs": info["latency"], "info": info}
     tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
-    return {"system": tmpl.format(post_text=post_text.strip()),
+    return {"system": tmpl.format(post_text=post_text.strip(), style_block=sb),
             "basis": "Post", "ccd": None, "ccd_path": None,
             "build_secs": 0.0, "info": None}
 
 
-def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None) -> str:
+def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None,
+                            style: str = DEFAULT_STYLE) -> str:
     """用(可能手改過的)CCD 內文組出 persona 的 system prompt,不打 API。
 
     給「手動編輯 CCD 後重建 persona」用:persona_prompt None 則用預設範本。
+    style: 對話風格(預設 plain)。
     """
     tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
-    return tmpl.format(ccd_text=ccd_text.strip())
+    return tmpl.format(ccd_text=ccd_text.strip(), style_block=style_block(style))
 
 
 def generate_persona_profile(post_text: str, profile_prompt: str = None):
@@ -451,13 +732,26 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     }
 
 
-def chat_once(messages: list):
+def chat_once(messages: list, temperature: float = 0.9,
+              presence_penalty: float = 0.3, frequency_penalty: float = 0.3):
     """messages 已含 system prompt 與歷史,回傳 (reply, info)。
+
+    取樣參數讓 persona 回覆更像真人(有變異、少樣板句):
+      temperature       - 越高越有變化(0.9 比預設更「像人」;研究時可從 UI 調)
+      presence_penalty  - 鼓勵帶進新內容,減少一直繞同一句
+      frequency_penalty - 壓低重複字詞,避免制式口頭禪
+    參數皆有預設值,既有呼叫端不改也能受惠(向後相容)。
 
     info = {latency, prompt_tokens, completion_tokens, total_tokens}
     """
     t0 = time.perf_counter()
-    response = get_client().chat.completions.create(model=MODEL, messages=messages)
+    response = get_client().chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        temperature=temperature,
+        presence_penalty=presence_penalty,
+        frequency_penalty=frequency_penalty,
+    )
     latency = time.perf_counter() - t0
     reply = response.choices[0].message.content
     return reply, {"latency": latency, **_token_usage(response)}
