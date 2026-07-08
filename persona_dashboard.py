@@ -96,11 +96,11 @@ PIPELINE_HTML = """
     <div class="pp-title a"><span class="tag">A</span>Post-CCD-Chatbox</div>
     <div class="pp-flow">
       <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_post_text()</small></div><div class="pp-arrow">→</div>
-      <div class="pp-node ccd"><b>CCD</b><small>Beck format</small><small class="call">gpt-4o<br>generate_ccd()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node ccd"><b>CCD</b><small>Patient-Ψ</small><small class="call">gpt-4o<br>generate_ccd_psi()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node persona"><b>Persona</b><small>from CCD</small><small class="call">build_persona()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node chat"><b>Chatbox</b><small>chat</small><small class="call">gpt-4o<br>chat_once()</small></div>
     </div>
-    <span class="pp-cap">Turn the post into a Beck-format CCD, then build the persona from the CCD.</span>
+    <span class="pp-cap">Turn the post into a Patient-Ψ structured CCD, then fill the official patient prompt from it.</span>
   </div>
   <div class="pp-panel b">
     <div class="pp-title b"><span class="tag">B</span>Direct Post-Chatbox</div>
@@ -159,8 +159,8 @@ _defaults = {
     "built_view": None,
     "saved": [],
     "build_counter": 0,
-    "build_ccd_prompt_edit": core.BUILD_CCD_PROMPT,
-    "persona_from_ccd_prompt_edit": core.PERSONA_FROM_CCD_PROMPT,
+    "build_ccd_prompt_edit": core.BUILD_CCD_PROMPT_PSI,
+    "persona_from_ccd_prompt_edit": core.PSI_PERSONA_SYSTEM_TEMPLATE,
     "persona_from_post_prompt_edit": core.PERSONA_FROM_POST_PROMPT,
 }
 for k, v in _defaults.items():
@@ -199,8 +199,8 @@ def load_sample():
 
 
 def reset_prompts():
-    st.session_state.build_ccd_prompt_edit = core.BUILD_CCD_PROMPT
-    st.session_state.persona_from_ccd_prompt_edit = core.PERSONA_FROM_CCD_PROMPT
+    st.session_state.build_ccd_prompt_edit = core.BUILD_CCD_PROMPT_PSI
+    st.session_state.persona_from_ccd_prompt_edit = core.PSI_PERSONA_SYSTEM_TEMPLATE
     st.session_state.persona_from_post_prompt_edit = core.PERSONA_FROM_POST_PROMPT
 
 
@@ -383,21 +383,10 @@ def render_build():
     if has_persona():
         kk, run = next(iter(st.session_state.runs.items()))
         if run.get("ccd"):
-            with st.expander("CCD profile (Beck CCD) — editable"):
+            with st.expander("CCD profile (Patient-Ψ structured fields)"):
                 if run.get("ccd_path"):
                     st.caption(f"📄 {run['ccd_path']}")
-                edited = st.text_area("CCD (editable)", value=run["ccd"], height=320,
-                                      key=f"ccd_edit_{st.session_state.build_counter}",
-                                      label_visibility="collapsed")
-                if st.button("✅ Apply edited CCD → rebuild persona"):
-                    run["ccd"] = edited
-                    run["system"] = core.persona_system_from_ccd(
-                        edited, st.session_state.persona_from_ccd_prompt_edit,
-                        style=st.session_state.build_style)
-                    run["messages"] = [{"role": "system", "content": run["system"]}]
-                    run["chat_history"] = []
-                    st.success("Persona rebuilt from the edited CCD. Chat was reset.")
-                    st.rerun()
+                st.text(run["ccd"])
         with st.expander("Final system prompt sent to the model"):
             st.code(run["system"], language="text")
         with st.expander("Source post used"):
@@ -406,8 +395,12 @@ def render_build():
     with st.expander("🧩 Edit prompts"):
         st.caption("The real templates sent to the model. Edit, then **Build** to apply. Keep each `{curly}` placeholder.")
         st.button("↩️ Reset to default", on_click=reset_prompts)
-        st.text_area("① Build CCD (A) — `{patient_text}`", key="build_ccd_prompt_edit", height=140)
-        st.text_area("② Roleplay from CCD (A) — `{ccd_text}`, `{style_block}`", key="persona_from_ccd_prompt_edit", height=140)
+        st.text_area("① Build CCD (A) — `{patient_text}`, `{helpless}`, `{unlovable}`, `{worthless}`, `{emotions}`",
+                     key="build_ccd_prompt_edit", height=140)
+        st.text_area("② Roleplay from CCD (A) — Patient-Ψ: `{name}` `{history}` `{core_belief}` "
+                     "`{intermediate_belief}` `{intermediate_belief_depression}` `{coping_strategies}` "
+                     "`{situation}` `{auto_thoughts}` `{emotion}` `{behavior}` `{style_content}`",
+                     key="persona_from_ccd_prompt_edit", height=140)
         st.text_area("③ Roleplay from post (B) — `{post_text}`, `{style_block}`", key="persona_from_post_prompt_edit", height=140)
 
 

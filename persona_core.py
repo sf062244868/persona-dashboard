@@ -11,6 +11,7 @@ load_post_text() 即可,其餘不動。
 
 import os
 import re
+import json
 import time
 import hashlib
 from pathlib import Path
@@ -271,8 +272,8 @@ PATIENT DATA:
 """
 
 
-def _ccd_psi_prompt(patient_text: str) -> str:
-    return BUILD_CCD_PROMPT_PSI.format(
+def _ccd_psi_prompt(patient_text: str, template: str = None) -> str:
+    return (template or BUILD_CCD_PROMPT_PSI).format(
         helpless=_bullet(PSI_CORE_BELIEFS["helpless"]),
         unlovable=_bullet(PSI_CORE_BELIEFS["unlovable"]),
         worthless=_bullet(PSI_CORE_BELIEFS["worthless"]),
@@ -284,13 +285,15 @@ def _ccd_psi_prompt(patient_text: str) -> str:
 _ccd_psi_cache = {}
 
 
-def generate_ccd_psi(post_text: str):
+def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
     """post → Patient-Ψ 結構化 CCD(dict)。回傳 (cm_dict, info)。
 
     cm_dict 含上述 JSON keys;core_beliefs / emotion 落在封閉集內,供自動 F1。
-    同一篇 post 走記憶體快取。
+    ccd_prompt: 自訂 CCD 建構 prompt(需保留 {helpless}{unlovable}{worthless}{emotions}{patient_text}
+    佔位符);None 則用預設 BUILD_CCD_PROMPT_PSI。同一篇 post + 同一份 prompt 走記憶體快取。
     """
-    key = hashlib.sha256(post_text.strip().encode("utf-8")).hexdigest()
+    ccd_prompt = ccd_prompt or BUILD_CCD_PROMPT_PSI
+    key = hashlib.sha256((ccd_prompt + "\x00" + post_text.strip()).encode("utf-8")).hexdigest()
     if key in _ccd_psi_cache:
         return _ccd_psi_cache[key], {"latency": 0.0, "cached": True,
                                      "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
@@ -301,7 +304,7 @@ def generate_ccd_psi(post_text: str):
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": "You reconstruct Beck cognitive conceptualization diagrams and reply with a single JSON object."},
-            {"role": "user", "content": _ccd_psi_prompt(post_text)},
+            {"role": "user", "content": _ccd_psi_prompt(post_text, ccd_prompt)},
         ],
     )
     latency = time.perf_counter() - t0
@@ -360,13 +363,32 @@ def _as_text(v):
     return str(v or "")
 
 
-def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient") -> str:
+def cm_to_text(cm: dict) -> str:
+    """把結構化 CCD(dict)攤成一份「給人看的」唯讀文字(dashboard 顯示/匯出用)。"""
+    order = [
+        ("Patient History", "life_history"),
+        ("Core Beliefs", "core_beliefs"),
+        ("Intermediate Beliefs", "intermediate_beliefs"),
+        ("Intermediate Beliefs during Depression", "intermediate_beliefs_during_depression"),
+        ("Coping Strategies", "coping_strategies"),
+        ("Situation", "situation"),
+        ("Automatic Thoughts", "automatic_thoughts"),
+        ("Emotions", "emotion"),
+        ("Behaviors", "behavior"),
+    ]
+    return "\n".join(f"{label}: {_as_text(cm.get(key)) or '(none)'}" for label, key in order)
+
+
+def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient",
+                       template: str = None) -> str:
     """用 Patient-Ψ 結構化 CCD(dict)+ 官方風格,組出官方病人 system prompt。
 
     忠實重現 formatPromptString;style 用官方 PSI_PATIENT_TYPES(非我們的近似版)。
+    template: 可傳自訂範本(dashboard「編輯 prompt」用);None 則用官方 PSI_PERSONA_SYSTEM_TEMPLATE。
     """
+    tmpl = template or PSI_PERSONA_SYSTEM_TEMPLATE
     style_content = PSI_PATIENT_TYPES.get((style or "plain").lower(), "")
-    return PSI_PERSONA_SYSTEM_TEMPLATE.format(
+    return tmpl.format(
         name=name or cm.get("name") or "the patient",
         history=_as_text(cm.get("life_history") or cm.get("history")),
         core_belief=_as_text(cm.get("core_beliefs")),
@@ -377,7 +399,8 @@ def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient"
         auto_thoughts=_as_text(cm.get("automatic_thoughts")),
         emotion=_as_text(cm.get("emotion")),
         behavior=_as_text(cm.get("behavior")),
-        style_content=style_content or "You are a standard patient with no specific conversational type.",
+        # 官方 formatPromptString:plain 對應空字串(guideline 1 留空),忠實照 paper。
+        style_content=style_content,
     )
 
 
@@ -574,6 +597,15 @@ def generate_ccd(post_text: str, ccd_prompt: str = None):
     return ccd, str(out_path), info
 
 
+def _save_ccd_json(cm: dict) -> str:
+    """把結構化 CCD(Patient-Ψ dict)存成 JSON 檔,回傳路徑。"""
+    CCD_DIR.mkdir(exist_ok=True)
+    existing = [f for f in os.listdir(CCD_DIR) if f.startswith("psi_") and f.endswith("_ccd.json")]
+    out_path = CCD_DIR / f"psi_{len(existing) + 1:03d}_ccd.json"
+    out_path.write_text(json.dumps(cm, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(out_path)
+
+
 def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
                   persona_prompt: str = None, style: str = DEFAULT_STYLE):
     """依模式建立 persona 的 system prompt。
@@ -592,10 +624,15 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
     """
     sb = style_block(style)
     if mode == MODE_CCD:
-        ccd, path, info = generate_ccd(post_text, ccd_prompt)
-        tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
-        return {"system": tmpl.format(ccd_text=ccd.strip(), style_block=sb),
-                "basis": "CCD", "ccd": ccd, "ccd_path": path,
+        # Method A 走 Patient-Ψ 結構化路徑:post → 結構化 CCD(dict)→ 逐欄位填入
+        # 官方病人 system prompt。style 直接對應官方 PSI_PATIENT_TYPES(鍵名與 UI 相同)。
+        cm, info = generate_ccd_psi(post_text, ccd_prompt)
+        name = cm.get("name") or "the patient"
+        system = psi_persona_system(cm, style=style, name=name,
+                                    template=persona_prompt or PSI_PERSONA_SYSTEM_TEMPLATE)
+        ccd_text = cm_to_text(cm)
+        path = _save_ccd_json(cm)
+        return {"system": system, "basis": "CCD", "ccd": ccd_text, "ccd_path": path,
                 "build_secs": info["latency"], "info": info}
     tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
     return {"system": tmpl.format(post_text=post_text.strip(), style_block=sb),
