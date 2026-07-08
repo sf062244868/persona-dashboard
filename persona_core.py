@@ -741,11 +741,15 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     """一篇 post → 一個完整 persona record(會打 gpt-4o)。
 
     批次(build_personas.py 的 16 篇)與即時(Cluster Search)共用這唯一一份邏輯,
-    所以兩條路徑產出的 CCD/persona 格式完全一致(CCD 永遠是 Beck 5 段)。
+    所以兩條路徑產出的 CCD/persona 格式完全一致。Method A 直接呼叫 build_persona(MODE_CCD),
+    與 dashboard「Build」分頁走同一條 Patient-Ψ 結構化 CCD + 官方 roleplay prompt 路徑。
     回傳結構與 personas.json 的紀錄相同(多一個 source 欄)。
     """
-    ccd, _path, ccd_info = generate_ccd(content)
-    system_a = persona_system_from_ccd(ccd)
+    # Method A：與 Build 分頁完全同一份實作(PSI 結構化 CCD + 官方 PSI roleplay prompt)。
+    method_a = build_persona(MODE_CCD, content)
+    ccd = method_a["ccd"]
+    ccd_info = method_a.get("info") or {}
+    system_a = method_a["system"]
     system_b = build_persona(MODE_DIRECT, content)["system"]
     name, bio, prof_info = generate_persona_profile(content)
     return {

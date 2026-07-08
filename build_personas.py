@@ -134,7 +134,7 @@ def main():
             "description": "16 pre-computed personas (1 per source post, 8 cluster themes x 2). "
                            "Streamlit reads this file and never calls the LLM at view time.",
             "source_posts": SELECTED.name,
-            "method_a": "post -> Beck CCD (gpt-4o) -> roleplay persona system prompt",
+            "method_a": "post -> Patient-Ψ structured CCD (gpt-4o) -> official PSI roleplay system prompt",
             "method_b": "post -> roleplay persona system prompt (direct, no API)",
             "persona_content": "first-person persona profile (for display)",
             "model": core.MODEL,

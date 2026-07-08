@@ -613,7 +613,7 @@ def render_cluster():
         with st.expander("Post body", expanded=True):
             st.write(post["body"])
 
-        st.caption("Runs the **same** pipeline as the library: post → Beck CCD → persona → profile.")
+        st.caption("Runs the **same** pipeline as the library: post → Patient-Ψ structured CCD → persona → profile.")
         if st.button("🧠 Generate persona", type="primary", key="cs_gen"):
             try:
                 with st.spinner("Building persona (gpt-4o: CCD + profile)…"):
