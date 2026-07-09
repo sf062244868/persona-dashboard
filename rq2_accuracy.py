@@ -36,8 +36,8 @@ import persona_core as core   # 共用封閉集常數（與 app 逐字一致）
 
 HERE = Path(__file__).resolve().parent
 PERSONAS_FILE = HERE / "personas.json"
-OUT_CSV = HERE / "RQ2_accuracy_llm.csv"
-OUT_MD = HERE / "RQ2_results.md"
+OUT_CSV_NAME = "RQ2_accuracy_llm.csv"
+OUT_MD_NAME = "RQ2_results.md"
 
 JUDGE_MODEL = "gpt-4o"            # 評審模型（Patient-Ψ 用 GPT-4；與 experiments/judge.py 一致）
 MODELS = ["gpt-4o", "gpt-4o-mini"]   # 受測病人模型（切換鈕兩端）
@@ -243,6 +243,7 @@ def main():
     ap.add_argument("--transcripts", help="逐字稿目錄（<id>__<model>.md）")
     ap.add_argument("--personas", help="逗號分隔的 source_post_id（省略＝隨機抽）")
     ap.add_argument("--seed", type=int, default=7, help="隨機種子（抽 persona＋洗誘答；可重現）")
+    ap.add_argument("--out", help="結果輸出目錄（預設＝腳本所在目錄；建議指向紀錄夾 results/）")
     ap.add_argument("--dry-run", action="store_true", help="只印 prompt、不打 API")
     args = ap.parse_args()
 
@@ -333,11 +334,15 @@ def main():
         print("\n(dry-run 結束：未呼叫 API、未寫檔)")
         return
 
-    write_outputs(rows, text_hits, closed_agg)
+    out_dir = Path(args.out) if args.out else HERE
+    out_dir.mkdir(parents=True, exist_ok=True)
+    write_outputs(rows, text_hits, closed_agg, out_dir)
 
 
-def write_outputs(rows, text_hits, closed_agg):
-    with OUT_CSV.open("w", newline="", encoding="utf-8") as fh:
+def write_outputs(rows, text_hits, closed_agg, out_dir):
+    out_csv = out_dir / OUT_CSV_NAME
+    out_md = out_dir / OUT_MD_NAME
+    with out_csv.open("w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["source_post_id", "persona_name", "model", "field",
                     "kind", "correct", "ground_truth", "predicted", "evidence"])
@@ -375,9 +380,9 @@ def write_outputs(rows, text_hits, closed_agg):
     L += ["", "> 明細見 `RQ2_accuracy_llm.csv`。Macro-F1 只平均「有出現過」的標籤（n 小、稀疏）。",
           "> 偏離 paper：治療師＝使用者本人（非 20 位臨床專家）、誘答池＝本專案 16 persona、",
           "> CCD＝GPT 從 Reddit 生成、n=3 pilot。"]
-    OUT_MD.write_text("\n".join(L), encoding="utf-8")
-    print(f"→ 寫出 {OUT_CSV}")
-    print(f"→ 寫出 {OUT_MD}")
+    out_md.write_text("\n".join(L), encoding="utf-8")
+    print(f"→ 寫出 {out_csv}")
+    print(f"→ 寫出 {out_md}")
 
 
 if __name__ == "__main__":
