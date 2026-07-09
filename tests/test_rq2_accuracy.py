@@ -95,6 +95,23 @@ def test_build_mcq_reproducible_with_same_seed():
     assert a == b                                      # 同 seed → 可重現
 
 
+def test_find_transcript_by_library_name_and_model(tmp_path):
+    """檔名用 library 名字也找得到；gpt-4o 不可誤配到 gpt-4o-mini。"""
+    (tmp_path / "Jake__gpt-4o.md").write_text("x", encoding="utf-8")
+    (tmp_path / "Jake__gpt-4o-mini.md").write_text("x", encoding="utf-8")
+    (tmp_path / "_TEMPLATE__example.md").write_text("x", encoding="utf-8")
+    persona = {"source_post_id": "1h8zpqh", "persona_name": "Jake (25M)"}
+    assert rq2.find_transcript(tmp_path, persona, "gpt-4o").name == "Jake__gpt-4o.md"
+    assert rq2.find_transcript(tmp_path, persona, "gpt-4o-mini").name == "Jake__gpt-4o-mini.md"
+    # 也能用 source_post_id 命名
+    (tmp_path / "1htp0xw__gpt-4o.md").write_text("x", encoding="utf-8")
+    pid_persona = {"source_post_id": "1htp0xw", "persona_name": "Max (Lonely)"}
+    assert rq2.find_transcript(tmp_path, pid_persona, "gpt-4o").name == "1htp0xw__gpt-4o.md"
+    # 缺檔回 None、_ 開頭範本被略過
+    assert rq2.find_transcript(tmp_path, {"source_post_id": "zzz",
+                                          "persona_name": "Nobody"}, "gpt-4o") is None
+
+
 def test_macro_f1_known_case():
     labels = ["a", "b", "c"]
     # 一場對話：真值{a,b} 預測{a,c}

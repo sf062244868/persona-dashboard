@@ -242,9 +242,32 @@ def pick_targets(personas, ids_arg, rng):
     return [by_id[i] for i in pool[:N_SAMPLE]]
 
 
-def find_transcript(tdir: Path, post_id: str, model: str):
-    cands = list(tdir.glob(f"{post_id}__{model}.*"))
-    return cands[0] if cands else None
+def name_slug(persona: dict) -> str:
+    """persona 顯示名的第一個字(小寫)，例：'Jake (25M)' → 'jake'。"""
+    nm = (persona.get("persona_name") or "").split("(")[0].strip()
+    return nm.split()[0].lower() if nm else ""
+
+
+def _model_ok(stem: str, model: str) -> bool:
+    """區分 gpt-4o 與 gpt-4o-mini（前者是後者的子字串，要排除 mini）。"""
+    has_mini = "mini" in stem
+    return has_mini if model == "gpt-4o-mini" else ("gpt-4o" in stem and not has_mini)
+
+
+def find_transcript(tdir: Path, persona: dict, model: str):
+    """檔名可用 source_post_id 或 library 名字（第一個字），只要含該識別碼＋對的 model 即可。
+    例：Jake__gpt-4o.md、1h8zpqh__gpt-4o-mini.md 都行。"""
+    pid = persona["source_post_id"].lower()
+    slug = name_slug(persona)
+    for f in sorted(tdir.iterdir()):
+        if not f.is_file() or f.name.startswith(("_", ".")):
+            continue
+        stem = f.stem.lower()
+        if not _model_ok(stem, model):
+            continue
+        if pid in stem or (slug and slug in stem):
+            return f
+    return None
 
 
 def struct_or_die(p):
@@ -293,7 +316,7 @@ def main():
         for model in MODELS:
             convo = None
             if tdir:
-                f = find_transcript(tdir, p["source_post_id"], model)
+                f = find_transcript(tdir, p, model)
                 if f:
                     convo = patient_text(f.read_text(encoding="utf-8"))
                 elif not args.dry_run:
