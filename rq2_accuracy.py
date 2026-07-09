@@ -39,6 +39,9 @@ PERSONAS_FILE = HERE / "personas.json"
 OUT_CSV_NAME = "RQ2_accuracy_llm.csv"
 OUT_MD_NAME = "RQ2_results.md"
 
+PSI_CORE_BELIEF_LABELS_ = core.PSI_CORE_BELIEF_LABELS   # 19 標籤（官方寫法，含句點）
+PSI_EMOTIONS_ = core.PSI_EMOTIONS                       # 9 情緒類別（同義詞群）
+
 JUDGE_MODEL = "gpt-4o"            # 評審模型（Patient-Ψ 用 GPT-4；與 experiments/judge.py 一致）
 MODELS = ["gpt-4o", "gpt-4o-mini"]   # 受測病人模型（切換鈕兩端）
 N_OPTIONS = 5                    # 5 選 1（1 真值 + 4 誘答，同 Table 6）
@@ -87,8 +90,23 @@ def gt_text(ccd: dict) -> dict:
     }
 
 
+def _norm(s: str) -> str:
+    """正規化：去頭尾空白與結尾句點、casefold，讓 CCD 生成值對齊封閉集標準寫法。"""
+    return (s or "").strip().rstrip(".").strip().casefold()
+
+
+def _canon(values, labels):
+    """把 CCD 生成的封閉集值，映射回封閉集官方標籤（差句點/大小寫也對得上）。"""
+    lut = {_norm(lab): lab for lab in labels}
+    out = set()
+    for v in values:
+        if v and v.strip():
+            out.add(lut.get(_norm(v), v.strip()))     # 對不上就保留原字（不致漏）
+    return out
+
+
 def gt_beliefs(ccd: dict) -> set:
-    return {b.strip() for b in (ccd.get("core_beliefs") or []) if b and b.strip()}
+    return _canon(ccd.get("core_beliefs") or [], PSI_CORE_BELIEF_LABELS_)
 
 
 def gt_emotions(ccd: dict) -> set:
@@ -96,7 +114,7 @@ def gt_emotions(ccd: dict) -> set:
     e = m.get("emotion") or []
     if isinstance(e, str):
         e = [e]
-    return {x.strip() for x in e if x and x.strip()}
+    return _canon(e, PSI_EMOTIONS_)
 
 
 # --------------------------------------------------------------------------

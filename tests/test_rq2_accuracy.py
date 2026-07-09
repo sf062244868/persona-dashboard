@@ -44,6 +44,18 @@ def test_gt_closed_sets():
         "anxious, worried, fearful, scared, tense", "hurt"}
 
 
+def test_gt_beliefs_canonicalizes_missing_period():
+    """CCD 生成常漏句點；gt_beliefs 要對齊封閉集官方寫法(含句點)才能算對 F1。"""
+    ccd = {"core_beliefs": ["I am bound to be rejected", "i am unlovable"],
+           "cognitive_models": [{"situation": "s", "automatic_thoughts": "a",
+                                 "emotion": [], "behavior": "b"}]}
+    got = rq2.gt_beliefs(ccd)
+    assert "I am bound to be rejected." in got      # 補回句點、對上封閉集
+    assert "I am unlovable." in got                 # 大小寫也對齊
+    # 對齊後就在 19 標籤全集內
+    assert got <= set(rq2.PSI_CORE_BELIEF_LABELS_)
+
+
 def test_patient_text_streamlit_format():
     md = ("===== Persona (A) =====\n[Chat]\n"
           "You: Hi, how was your week?\n"
