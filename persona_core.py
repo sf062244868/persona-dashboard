@@ -665,8 +665,8 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
                                     cm_index=cm_index)
         ccd_text = cm_to_text(cm)
         path = _save_ccd_json(cm)
-        return {"system": system, "basis": "CCD", "ccd": ccd_text, "ccd_path": path,
-                "build_secs": info["latency"], "info": info, "name": name}
+        return {"system": system, "basis": "CCD", "ccd": ccd_text, "ccd_struct": cm,
+                "ccd_path": path, "build_secs": info["latency"], "info": info, "name": name}
     tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
     return {"system": tmpl.format(post_text=post_text.strip(), style_block=sb),
             "basis": "Post", "ccd": None, "ccd_path": None,
@@ -784,6 +784,7 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     first_name = name.split("(")[0].strip().split()[0] if name and name.strip() else None
     method_a = build_persona(MODE_CCD, content, name=first_name)
     ccd = method_a["ccd"]
+    ccd_struct = method_a.get("ccd_struct")   # 結構化 CCD dict,供 RQ2 準確度評分當 ground truth
     ccd_info = method_a.get("info") or {}
     system_a = method_a["system"]
     system_b = build_persona(MODE_DIRECT, content)["system"]
@@ -798,7 +799,7 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
         "source_url": url,
         "title": title,
         "content_hash": hashlib.sha256(content.strip().encode("utf-8")).hexdigest(),
-        "method_a": {"ccd": ccd, "persona_system": system_a},
+        "method_a": {"ccd": ccd, "ccd_struct": ccd_struct, "persona_system": system_a},
         "method_b": {"persona_system": system_b},
         "gen": {"model": MODEL,
                 "ccd_tokens": ccd_info.get("total_tokens"),
