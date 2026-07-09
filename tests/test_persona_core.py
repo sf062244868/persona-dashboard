@@ -106,3 +106,33 @@ def test_ccd_cache_returns_same(monkeypatch):
     assert ccd1 == ccd2 == "CCD-FROM-API"
     assert calls["n"] == 1            # 第二次沒再打 API
     assert info1["cached"] is False and info2["cached"] is True
+
+
+def test_chat_once_switches_model_and_drops_penalties(monkeypatch):
+    """gpt-4o/mini 切換:chat_once 把選定 model 傳進 client、回報在 info、且不再帶 penalty。"""
+    captured = {}
+
+    class _Msg:
+        content = "hi there"
+
+    class _Choice:
+        message = _Msg()
+
+    class _Resp:
+        choices = [_Choice()]
+        usage = type("U", (), {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3})()
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    captured.update(kw)
+                    return _Resp()
+
+    monkeypatch.setattr(core, "get_client", lambda: _Client())
+    reply, info = core.chat_once([{"role": "user", "content": "hi"}], model="gpt-4o-mini")
+    assert captured["model"] == "gpt-4o-mini"          # 真的把 mini 傳給 API
+    assert "presence_penalty" not in captured          # penalty 已移除
+    assert "frequency_penalty" not in captured
+    assert info["model"] == "gpt-4o-mini"              # UI 可顯示本則用哪個 model

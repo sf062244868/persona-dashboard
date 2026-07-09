@@ -127,6 +127,8 @@ def _cost(prompt_tokens, completion_tokens) -> float:
 
 def _meta_chips(info: dict) -> list:
     bits = []
+    if info.get("model"):
+        bits.append(f"🧠 {info['model']}")
     if info.get("latency"):
         bits.append(f"⏱ {info['latency']:.1f}s")
     if info.get("total_tokens"):
@@ -174,20 +176,25 @@ _STYLE_HELP = ("How this persona tends to communicate — mirrors the range of r
 
 
 def style_temp_controls(key_prefix: str):
-    """一列共用控制:對話風格下拉 + 溫度滑桿。回傳 (style, temperature)。
+    """一列共用控制:對話風格 + 溫度 + 聊天模型。回傳 (style, temperature, model)。
 
-    風格在「建立/切換」時烘進 system prompt;溫度即時作用於每次 chat_once。
+    風格在「建立/切換」時烘進 system prompt;溫度與模型即時作用於每次 chat_once。
     """
-    c1, c2 = st.columns([2, 3])
+    c1, c2, c3 = st.columns([2, 3, 2])
     with c1:
         style = st.selectbox("Conversational style", STYLE_OPTIONS,
                              key=f"{key_prefix}_style", help=_STYLE_HELP)
     with c2:
-        temp = st.slider("Naturalness (temperature)", 0.0, 1.4, 0.9, 0.1,
+        temp = st.slider("Naturalness (temperature)", 0.0, 1.4, 1.0, 0.1,
                          key=f"{key_prefix}_temp",
-                         help="Higher = more varied, human-like, less templated. "
-                              "Lower = safer and more repetitive.")
-    return style, temp
+                         help="Higher = more varied; lower = safer and more repetitive.")
+    with c3:
+        model = st.selectbox("Chat model", ["gpt-4o", "gpt-4o-mini"],
+                             key=f"{key_prefix}_model",
+                             help="Which OpenAI model answers as the persona. The same API key "
+                                  "covers both. gpt-4o = faithful baseline (paper used GPT-4/4o); "
+                                  "gpt-4o-mini = cheaper side comparison.")
+    return style, temp, model
 
 
 def has_persona() -> bool:
@@ -281,7 +288,8 @@ def render_build():
                         help="A: build a CCD first, then the persona. B: build directly from the post.")
         st.text_area("Post", key="post_input", height=150,
                       placeholder="Paste any post / self-description here…")
-        build_style, build_temp = style_temp_controls("build")
+        build_style, build_temp, build_model = style_temp_controls("build")
+        st.caption(f"🧠 Replies use **{build_model}**")
         b1, b2, _ = st.columns([1, 1, 3])
         with b1:
             st.button("📄 Sample", on_click=load_sample, use_container_width=True)
@@ -371,7 +379,8 @@ def render_build():
         kk, run = next(iter(st.session_state.runs.items()))
         run["messages"].append({"role": "user", "content": user_input})
         try:
-            reply, info = core.chat_once(run["messages"], temperature=st.session_state.build_temp)
+            reply, info = core.chat_once(run["messages"], temperature=st.session_state.build_temp,
+                                         model=st.session_state.build_model)
         except Exception as e:
             reply, info = f"(Error: {type(e).__name__}: {e})", None
         run["messages"].append({"role": "assistant", "content": reply})
@@ -445,7 +454,8 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
                       key=f"{key_prefix}_method",
                       help="Which cached system prompt drives the chat.")
     base_prompt = rec["method_a"]["persona_system"] if method == "A" else rec["method_b"]["persona_system"]
-    style, temp = style_temp_controls(f"{key_prefix}_{rec['source_post_id']}")
+    style, temp, model = style_temp_controls(f"{key_prefix}_{rec['source_post_id']}")
+    st.caption(f"🧠 Replies use **{model}**")
     # 這些 persona 是預先烘好的(personas.json),沒有 {style_block};直接把風格片段附加上去。
     sb = core.style_block(style)
     system_prompt = base_prompt + ("\n\nExtra:\n" + sb if sb else "")
@@ -475,7 +485,7 @@ def render_persona_panel(rec, key_prefix, source_posts=None):
     if user_input:
         thread["messages"].append({"role": "user", "content": user_input})
         try:
-            reply, _info = core.chat_once(thread["messages"], temperature=temp)
+            reply, _info = core.chat_once(thread["messages"], temperature=temp, model=model)
         except Exception as e:
             reply = f"(Error: {type(e).__name__}: {e})"
         thread["messages"].append({"role": "assistant", "content": reply})

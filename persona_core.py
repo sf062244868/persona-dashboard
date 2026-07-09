@@ -808,26 +808,24 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     }
 
 
-def chat_once(messages: list, temperature: float = 0.9,
-              presence_penalty: float = 0.3, frequency_penalty: float = 0.3):
+def chat_once(messages: list, temperature: float = 1.0, model: str = MODEL):
     """messages 已含 system prompt 與歷史,回傳 (reply, info)。
 
-    取樣參數讓 persona 回覆更像真人(有變異、少樣板句):
-      temperature       - 越高越有變化(0.9 比預設更「像人」;研究時可從 UI 調)
-      presence_penalty  - 鼓勵帶進新內容,減少一直繞同一句
-      frequency_penalty - 壓低重複字詞,避免制式口頭禪
-    參數皆有預設值,既有呼叫端不改也能受惠(向後相容)。
+    model       - 聊天模型(gpt-4o = 忠實基準,Patient-Ψ 用 GPT-4/4o;gpt-4o-mini = 側比較)。
+                  同一把 OPENAI_API_KEY 同時涵蓋兩者,切換只是換 model 字串。
+    temperature - 取樣溫度(UI 滑桿即時控制)。
 
-    info = {latency, prompt_tokens, completion_tokens, total_tokens}
+    註:已移除先前為「更像人」自加的 presence/frequency penalty——那非 Patient-Ψ
+    論文設定,拿掉以貼近論文。
+
+    info = {latency, model, prompt_tokens, completion_tokens, total_tokens}
     """
     t0 = time.perf_counter()
     response = get_client().chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=messages,
         temperature=temperature,
-        presence_penalty=presence_penalty,
-        frequency_penalty=frequency_penalty,
     )
     latency = time.perf_counter() - t0
     reply = response.choices[0].message.content
-    return reply, {"latency": latency, **_token_usage(response)}
+    return reply, {"latency": latency, "model": model, **_token_usage(response)}
