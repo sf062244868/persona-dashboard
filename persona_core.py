@@ -245,16 +245,18 @@ def _bullet(items):
 BUILD_CCD_PROMPT_PSI = """You are a CBT therapist who is professional and empathetic. You just ended a therapy session with a patient. Reconstruct the patient's cognitive model (Beck cognitive conceptualization diagram) based ONLY on the text below. Do not invent facts — infer only from what is written.
 
 Return a SINGLE JSON object (no markdown fences) with EXACTLY these keys:
+- "name": string. A plausible first name for the patient, grounded in the text (match apparent age/gender if stated). Do not use "Alex".
 - "life_history": string. Significant background / life events contributing to the current state.
 - "core_belief_category": string. Choose ONE of: "helpless", "unlovable", "worthless".
 - "core_beliefs": array of strings. Pick one or more from the chosen category's closed set below (use the exact wording).
 - "intermediate_beliefs": string. Rules / attitudes / assumptions.
 - "intermediate_beliefs_during_depression": string. How those beliefs shift during low periods.
 - "coping_strategies": string.
-- "situation": string. One specific triggering situation from the text.
-- "automatic_thoughts": string. The immediate thought(s) in that situation.
-- "emotion": array of strings. Pick AT MOST 3 from the emotion closed set below (use the exact label wording).
-- "behavior": string. The resulting behavior(s).
+- "cognitive_models": array of AT LEAST 3 distinct objects. Each object has EXACTLY these keys:
+    - "situation": string. One specific triggering situation from the text.
+    - "automatic_thoughts": string. The immediate thought(s) in that situation.
+    - "emotion": array of strings. Pick AT MOST 3 from the emotion closed set below (use the exact label wording).
+    - "behavior": string. The resulting behavior(s).
 
 Core-belief closed set:
 [helpless]
@@ -363,31 +365,60 @@ def _as_text(v):
     return str(v or "")
 
 
+def _cognitive_models(cm: dict) -> list:
+    """回傳 cognitive model 清單(每個含 situation/automatic_thoughts/emotion/behavior)。
+
+    忠於官方 generation_template.py:一份 CCD 應有「≥3 個」cognitive model。
+    向後相容:若拿到舊格式(扁平單一 situation…),包成一個。
+    """
+    models = cm.get("cognitive_models")
+    if isinstance(models, list) and models:
+        return models
+    return [{
+        "situation": cm.get("situation"),
+        "automatic_thoughts": cm.get("automatic_thoughts") or cm.get("auto_thoughts"),
+        "emotion": cm.get("emotion"),
+        "behavior": cm.get("behavior"),
+    }]
+
+
 def cm_to_text(cm: dict) -> str:
-    """把結構化 CCD(dict)攤成一份「給人看的」唯讀文字(dashboard 顯示/匯出用)。"""
-    order = [
+    """把結構化 CCD(dict)攤成一份「給人看的」唯讀文字(dashboard 顯示/匯出用)。
+
+    情境段落列出所有 cognitive model(官方 CCD 應有 ≥3 個)。
+    """
+    head = [
         ("Patient History", "life_history"),
         ("Core Beliefs", "core_beliefs"),
         ("Intermediate Beliefs", "intermediate_beliefs"),
         ("Intermediate Beliefs during Depression", "intermediate_beliefs_during_depression"),
         ("Coping Strategies", "coping_strategies"),
-        ("Situation", "situation"),
-        ("Automatic Thoughts", "automatic_thoughts"),
-        ("Emotions", "emotion"),
-        ("Behaviors", "behavior"),
     ]
-    return "\n".join(f"{label}: {_as_text(cm.get(key)) or '(none)'}" for label, key in order)
+    lines = [f"{label}: {_as_text(cm.get(key)) or '(none)'}" for label, key in head]
+    models = _cognitive_models(cm)
+    for i, m in enumerate(models, 1):
+        tag = f" #{i}" if len(models) > 1 else ""
+        lines.append(f"Situation{tag}: {_as_text(m.get('situation')) or '(none)'}")
+        lines.append(f"Automatic Thoughts{tag}: "
+                     f"{_as_text(m.get('automatic_thoughts') or m.get('auto_thoughts')) or '(none)'}")
+        lines.append(f"Emotions{tag}: {_as_text(m.get('emotion')) or '(none)'}")
+        lines.append(f"Behaviors{tag}: {_as_text(m.get('behavior')) or '(none)'}")
+    return "\n".join(lines)
 
 
-def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient",
-                       template: str = None) -> str:
+def psi_persona_system(cm: dict, style: str = "plain", name: str = None,
+                       template: str = None, cm_index: int = 0) -> str:
     """用 Patient-Ψ 結構化 CCD(dict)+ 官方風格,組出官方病人 system prompt。
 
     忠實重現 formatPromptString;style 用官方 PSI_PATIENT_TYPES(非我們的近似版)。
     template: 可傳自訂範本(dashboard「編輯 prompt」用);None 則用官方 PSI_PERSONA_SYSTEM_TEMPLATE。
+    cm_index: CCD 有 ≥3 個 cognitive model;官方一場 session 只用其中一個(如 Abe 1-1/1-2/1-3),
+              以此索引選填 situation/automatic_thoughts/emotion/behavior(超界則退回第一個)。
     """
     tmpl = template or PSI_PERSONA_SYSTEM_TEMPLATE
     style_content = PSI_PATIENT_TYPES.get((style or "plain").lower(), "")
+    models = _cognitive_models(cm)
+    m = models[cm_index] if 0 <= cm_index < len(models) else (models[0] if models else {})
     return tmpl.format(
         name=name or cm.get("name") or "the patient",
         history=_as_text(cm.get("life_history") or cm.get("history")),
@@ -395,10 +426,10 @@ def psi_persona_system(cm: dict, style: str = "plain", name: str = "the patient"
         intermediate_belief=_as_text(cm.get("intermediate_beliefs")),
         intermediate_belief_depression=_as_text(cm.get("intermediate_beliefs_during_depression")),
         coping_strategies=_as_text(cm.get("coping_strategies")),
-        situation=_as_text(cm.get("situation")),
-        auto_thoughts=_as_text(cm.get("automatic_thoughts")),
-        emotion=_as_text(cm.get("emotion")),
-        behavior=_as_text(cm.get("behavior")),
+        situation=_as_text(m.get("situation")),
+        auto_thoughts=_as_text(m.get("automatic_thoughts") or m.get("auto_thoughts")),
+        emotion=_as_text(m.get("emotion")),
+        behavior=_as_text(m.get("behavior")),
         # 官方 formatPromptString:plain 對應空字串(guideline 1 留空),忠實照 paper。
         style_content=style_content,
     )
@@ -607,7 +638,8 @@ def _save_ccd_json(cm: dict) -> str:
 
 
 def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
-                  persona_prompt: str = None, style: str = DEFAULT_STYLE):
+                  persona_prompt: str = None, style: str = DEFAULT_STYLE,
+                  name: str = None, cm_index: int = 0):
     """依模式建立 persona 的 system prompt。
 
     ccd_prompt     - 自訂 CCD 建構 prompt(僅 CCD 模式用;None 用預設)
@@ -627,13 +659,14 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
         # Method A 走 Patient-Ψ 結構化路徑:post → 結構化 CCD(dict)→ 逐欄位填入
         # 官方病人 system prompt。style 直接對應官方 PSI_PATIENT_TYPES(鍵名與 UI 相同)。
         cm, info = generate_ccd_psi(post_text, ccd_prompt)
-        name = cm.get("name") or "the patient"
+        name = name or cm.get("name") or "the patient"
         system = psi_persona_system(cm, style=style, name=name,
-                                    template=persona_prompt or PSI_PERSONA_SYSTEM_TEMPLATE)
+                                    template=persona_prompt or PSI_PERSONA_SYSTEM_TEMPLATE,
+                                    cm_index=cm_index)
         ccd_text = cm_to_text(cm)
         path = _save_ccd_json(cm)
         return {"system": system, "basis": "CCD", "ccd": ccd_text, "ccd_path": path,
-                "build_secs": info["latency"], "info": info}
+                "build_secs": info["latency"], "info": info, "name": name}
     tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
     return {"system": tmpl.format(post_text=post_text.strip(), style_block=sb),
             "basis": "Post", "ccd": None, "ccd_path": None,
@@ -746,12 +779,14 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     回傳結構與 personas.json 的紀錄相同(多一個 source 欄)。
     """
     # Method A：與 Build 分頁完全同一份實作(PSI 結構化 CCD + 官方 PSI roleplay prompt)。
-    method_a = build_persona(MODE_CCD, content)
+    # 先取 persona 名字,讓 roleplay prompt 用真名(而非 fallback 的 "the patient")。
+    name, bio, prof_info = generate_persona_profile(content)
+    first_name = name.split("(")[0].strip().split()[0] if name and name.strip() else None
+    method_a = build_persona(MODE_CCD, content, name=first_name)
     ccd = method_a["ccd"]
     ccd_info = method_a.get("info") or {}
     system_a = method_a["system"]
     system_b = build_persona(MODE_DIRECT, content)["system"]
-    name, bio, prof_info = generate_persona_profile(content)
     return {
         "persona_id": persona_id,
         "persona_name": name or f"{cluster or subreddit} persona",

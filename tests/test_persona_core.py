@@ -29,18 +29,51 @@ def test_build_persona_direct_no_api():
     assert "I feel stuck and tired." in r["system"]
 
 
+FAKE_CM = {
+    "name": "Testy",
+    "life_history": "some background",
+    "core_belief_category": "unlovable",
+    "core_beliefs": ["I am unlovable."],
+    "intermediate_beliefs": "some rule",
+    "intermediate_beliefs_during_depression": "N/A",
+    "coping_strategies": "avoidance",
+    "cognitive_models": [
+        {"situation": "SITU-ONE", "automatic_thoughts": "AT1",
+         "emotion": ["sad, down, lonely, unhappy"], "behavior": "B1"},
+        {"situation": "SITU-TWO", "automatic_thoughts": "AT2",
+         "emotion": ["hurt"], "behavior": "B2"},
+        {"situation": "SITU-THREE", "automatic_thoughts": "AT3",
+         "emotion": ["guilty"], "behavior": "B3"},
+    ],
+}
+
+
 def test_build_persona_ccd_monkeypatched(monkeypatch):
-    def fake_generate_ccd(post_text, ccd_prompt=None):
+    def fake_generate_ccd_psi(post_text, ccd_prompt=None):
         info = {"latency": 1.23, "cached": True,
                 "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-        return "FAKE-CCD-BODY", "/tmp/fake_ccd.txt", info
+        return FAKE_CM, info
 
-    monkeypatch.setattr(core, "generate_ccd", fake_generate_ccd)
+    monkeypatch.setattr(core, "generate_ccd_psi", fake_generate_ccd_psi)
+    monkeypatch.setattr(core, "_save_ccd_json", lambda cm: "/tmp/fake_ccd.json")
     r = core.build_persona(core.MODE_CCD, "some post text")
     assert r["basis"] == "CCD"
-    assert "FAKE-CCD-BODY" in r["system"]
-    assert r["ccd_path"] == "/tmp/fake_ccd.txt"
+    assert "Imagine you are Testy" in r["system"]      # 用真名,不是 "the patient"
+    assert "SITU-ONE" in r["system"]                   # 預設用第 1 個 cognitive model
     assert r["build_secs"] == 1.23
+    # cm_to_text 應把 ≥3 個情境全列出
+    assert "SITU-TWO" in r["ccd"] and "SITU-THREE" in r["ccd"]
+
+
+def test_build_persona_ccd_situation_index(monkeypatch):
+    """cm_index 選第幾個 cognitive model,忠於官方 Abe 1-1/1-2/1-3 的一場一情境。"""
+    def fake_generate_ccd_psi(post_text, ccd_prompt=None):
+        return FAKE_CM, {"latency": 0.0, "cached": True}
+
+    monkeypatch.setattr(core, "generate_ccd_psi", fake_generate_ccd_psi)
+    monkeypatch.setattr(core, "_save_ccd_json", lambda cm: "/tmp/fake_ccd.json")
+    r = core.build_persona(core.MODE_CCD, "some post text", cm_index=1)
+    assert "SITU-TWO" in r["system"] and "SITU-ONE" not in r["system"]
 
 
 def test_ccd_cache_returns_same(monkeypatch):
