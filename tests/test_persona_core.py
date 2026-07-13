@@ -49,7 +49,7 @@ FAKE_CM = {
 
 
 def test_build_persona_ccd_monkeypatched(monkeypatch):
-    def fake_generate_ccd_psi(post_text, ccd_prompt=None):
+    def fake_generate_ccd_psi(post_text, ccd_prompt=None, name=None):
         info = {"latency": 1.23, "cached": True,
                 "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
         return FAKE_CM, info
@@ -65,9 +65,76 @@ def test_build_persona_ccd_monkeypatched(monkeypatch):
     assert "SITU-TWO" in r["ccd"] and "SITU-THREE" in r["ccd"]
 
 
+# 新版 beck-aligned Stage-1 CCD:每格是 {text,grounding,evidence} box、無封閉集。
+NEW_BOX_CM = {
+    "name": "Max",
+    "themes": ["loneliness"],
+    "cognitive_models": [{
+        "situation": {"text": "Saw old friends hanging out without me online",
+                      "grounding": "stated",
+                      "evidence": ["friends hanging out without me"]},
+        "automatic_thoughts": {"text": "I wasn't invited; I'm not part of that anymore",
+                               "grounding": "stated", "evidence": ["wasn't invited"]},
+        "meaning_of_automatic_thought": {"text": "It means no one wants me around ?",
+                                         "grounding": "inferred", "evidence": []},
+        "emotion": {"text": "lonely, left out", "grounding": "stated",
+                    "evidence": ["lonely"]},
+        "behavior": {"text": "Stayed on the couch, reached out to no one",
+                     "grounding": "stated", "evidence": ["reached out to no one"]},
+    }],
+    "core_belief": {"text": "I'm meant to be alone ?", "grounding": "inferred", "evidence": []},
+    "intermediate_beliefs": {"text": "If I share my struggles I'll be a burden ?",
+                             "grounding": "inferred", "evidence": []},
+    "coping_strategies": {"text": "Withdraws further; distracts with TV",
+                          "grounding": "stated", "evidence": ["friends hanging out without me"]},
+    # 這格故意放一條「不在 post 裡」的 evidence,用來驗 grounding_report 的 fail 分支。
+    "life_history": {"text": "Friends drifted after university",
+                     "grounding": "stated", "evidence": ["moved abroad as a kid"]},
+    "prompt_version": "beck-aligned-v1",
+}
+
+POST_TEXT_FOR_NEW_BOX = ("I'm mostly by myself. I saw old friends hanging out without me "
+                         "online and I wasn't invited. I felt lonely and reached out to no one.")
+
+
+def test_new_box_shape_renders_and_feeds_persona(monkeypatch):
+    """新 box 形:CCD 文字與 persona system 都不可漏出 str(dict);核心信念要進得去。"""
+    def fake_generate_ccd_psi(post_text, ccd_prompt=None, name=None):
+        return NEW_BOX_CM, {"latency": 0.0, "cached": True}
+
+    monkeypatch.setattr(core, "generate_ccd_psi", fake_generate_ccd_psi)
+    monkeypatch.setattr(core, "_save_ccd_json", lambda cm: "/tmp/fake_ccd.json")
+    r = core.build_persona(core.MODE_CCD, POST_TEXT_FOR_NEW_BOX, name="Max")
+
+    ccd_text, system = r["ccd"], r["system"]
+    # 沒有 dict 字面漏出來
+    assert "'text':" not in ccd_text and "{'text'" not in system
+    # 核心信念的「本人原話」有進 CCD 文字與 persona
+    assert "I'm meant to be alone" in ccd_text
+    assert "I'm meant to be alone" in system
+    # grounding 標記有出現在給人看的文字
+    assert "[stated]" in ccd_text and "[inferred]" in ccd_text
+    # 情境/行為的 box text(非 dict)有攤平進 persona
+    assert "reached out to no one" in system
+
+
+def test_grounding_report_counts():
+    """grounding_report:stated 的 evidence 對得上 post 才 pass;inferred 要有 '?'。"""
+    rep = core.grounding_report(NEW_BOX_CM, POST_TEXT_FOR_NEW_BOX)
+    s = rep["summary"]
+    assert s["n_boxes"] == 9                       # 4 top + 5 per-situation
+    assert s["inferred_total"] == 3                # meaning / core_belief / intermediate
+    assert s["inferred_marked"] == 3               # 三個都以 '?' 結尾
+    assert s["stated_total"] == 6                  # 其餘 6 格為 stated
+    # 只有 life_history 那條 evidence 不在 post → 恰好 1 格 stated 應 fail
+    bad = [r for r in rep["rows"] if r["grounding"] == "stated" and r["ok"] is False]
+    assert len(bad) == 1 and bad[0]["box"] == "life_history"
+    assert s["stated_pass"] == 5
+
+
 def test_build_persona_ccd_situation_index(monkeypatch):
     """cm_index 選第幾個 cognitive model,忠於官方 Abe 1-1/1-2/1-3 的一場一情境。"""
-    def fake_generate_ccd_psi(post_text, ccd_prompt=None):
+    def fake_generate_ccd_psi(post_text, ccd_prompt=None, name=None):
         return FAKE_CM, {"latency": 0.0, "cached": True}
 
     monkeypatch.setattr(core, "generate_ccd_psi", fake_generate_ccd_psi)

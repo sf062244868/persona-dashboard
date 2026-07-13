@@ -241,61 +241,123 @@ def _bullet(items):
     return "\n".join(f"  - {x}" for x in items)
 
 
-# --- CCD 生成(移植 generation_template.py 的 schema,改為輸出 JSON)--------
-BUILD_CCD_PROMPT_PSI = """You are a CBT therapist who is professional and empathetic. You just ended a therapy session with a patient. Reconstruct the patient's cognitive model (Beck cognitive conceptualization diagram) based ONLY on the text below. Do not invent facts — infer only from what is written.
+# --- Stage-1 CCD 生成(對齊 Beck 2020 Worksheet Packet;free-text、無封閉集)---------
+# 逐條出處對照見 docs/BUILD_CCD_PROMPT_beck_aligned.md。與舊版關鍵差異:
+#   - 兩段式:Stage 1 只做「post → 自由文字 CCD」,封閉集 label 交給獨立的 Stage 2 外掛。
+#   - 每格是可稽核 box:{"text","grounding":"stated"|"inferred","evidence":[原文精確子字串]}。
+#     stated 的 evidence 必為 post 的逐字子字串 → 讓「CCD vs origin post」能字串比對(見 grounding_report)。
+#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name grounding、禁用 "Alex"。
+#   - 佔位符只剩 {name}{patient_text}(舊的 {helpless}{unlovable}{worthless}{emotions} 已移除)。
+#   ⚠ prompt 內含字面 JSON 大括號,務必用 _ccd_psi_prompt 的 .replace 套版,不可用 str.format。
+BUILD_CCD_PROMPT_PSI = """You are completing a Beck Institute (Traditional) Cognitive Conceptualization Diagram (CCD)
+for the person who wrote the TEXT below, following the CBT Worksheet Packet (J. Beck, 2020),
+Traditional CCD section. A CCD is a set of working hypotheses that organizes what the person
+actually wrote; it is NOT a diagnosis. Do not assume depression or any disorder. If the TEXT
+itself states a diagnosis or clinical fact, record it faithfully — but never add one.
 
-Return a SINGLE JSON object (no markdown fences) with EXACTLY these keys:
-- "name": string. A plausible first name for the patient, grounded in the text (match apparent age/gender if stated). Do not use "Alex".
-- "life_history": string. Significant background / life events contributing to the current state.
-- "core_belief_category": string. Choose ONE of: "helpless", "unlovable", "worthless".
-- "core_beliefs": array of strings. Pick one or more from the chosen category's closed set below (use the exact wording).
-- "intermediate_beliefs": string. Rules / attitudes / assumptions.
-- "intermediate_beliefs_during_depression": string. How those beliefs shift during low periods.
-- "coping_strategies": string.
-- "cognitive_models": array of AT LEAST 3 distinct objects. Each object has EXACTLY these keys:
-    - "situation": string. One specific triggering situation from the text.
-    - "automatic_thoughts": string. The immediate thought(s) in that situation.
-    - "emotion": array of strings. Pick AT MOST 3 from the emotion closed set below (use the exact label wording).
-    - "behavior": string. The resulting behavior(s).
+GROUNDING RULES
+1. The diagram must be based on specific information the person provides. Work ONLY from
+   the TEXT.
+2. Every CCD box is one of two kinds:
+   - "stated": the box restates something the person wrote. Its "evidence" list must contain
+     EXACT substrings copied verbatim from the TEXT (they will be checked by string match).
+   - "inferred": a hypothesis of yours. Append " ?" to the box text — the worksheet requires
+     hypotheses to be marked (e.g., with a question mark) and treated as tentative until the
+     client confirms them. This person cannot confirm them, so keep every hypothesis modest
+     and close to the TEXT, and still list the exact quotes that motivated it in "evidence".
+3. If a box cannot be grounded at all, set its text to "insufficient information" and leave
+   "evidence" empty. An honest empty box is correct; a filled ungrounded box is an error.
+4. The person's self-evaluations (e.g., "I'm a burden") are BELIEF material, not biographical
+   fact: they belong in the belief boxes (core belief / intermediate beliefs / meaning), never
+   in life history.
 
-Core-belief closed set:
-[helpless]
-{helpless}
-[unlovable]
-{unlovable}
-[worthless]
-{worthless}
+ORDER OF WORK — bottom-up, as the worksheet instructs ("start midway down the page")
+First identify the problematic situation(s), then the automatic thoughts, then what each
+thought meant to the person; ascertaining the meaning of the automatic thoughts across the
+situations should lead to your hypothesis about the core belief. Only then complete the top
+boxes. Generate the JSON keys strictly in the order given below — it enforces this order
+of work.
 
-Emotion closed set (pick at most 3, exact wording):
-{emotions}
+SITUATION COUNT
+Choose situations in which the person displays a pattern of unhelpful behavior or in which
+their automatic thoughts show common themes; if there is more than one theme, include a
+situation that reflects it. One situation box per theme the TEXT actually grounds — a
+single-theme post yields ONE box. Never invent situations to fill a quota.
 
-PATIENT DATA:
+OUTPUT
+Return a SINGLE JSON object (no markdown fences). Every CCD box is an object:
+  {"text": string, "grounding": "stated" | "inferred", "evidence": [exact quotes from TEXT]}
+For an empty box use {"text": "insufficient information", "grounding": null, "evidence": []}.
+
+Keys, in this exact generation order:
+
+- "name": string. Use the NAME provided below verbatim if given; otherwise a plausible first
+  name grounded in the TEXT. Never use "Alex".
+
+- "themes": array of short strings — the distinct problematic theme(s) the TEXT grounds.
+
+- "cognitive_models": array, ONE object per theme, each with:
+    - "situation": box. "What was the problematic situation?" One specific moment or event
+      from the TEXT, not a general ongoing state.
+    - "automatic_thoughts": box. "What went through the person's mind?" The surface words in
+      that moment. This is NOT the core belief; if the TEXT records no in-the-moment thought,
+      write "insufficient information" rather than promoting a conclusion into this box.
+    - "meaning_of_automatic_thought": box. "What did the automatic thought mean to them?"
+      The bridge from that surface thought toward a belief about the self. Usually "inferred".
+    - "emotion": box. "What emotion was associated with the automatic thought?" The feeling
+      word(s) the person used or clearly implied, as free text — there is no fixed list.
+    - "behavior": box. "What did the person do then?"
+
+- "core_belief": box. "What is the person's most central dysfunctional belief about
+  themself?" State it in the person's own framing, derived FROM the meanings above. This is
+  almost always "inferred" (with " ?").
+
+- "intermediate_beliefs": box. "Which assumptions, rules and attitudes help them cope with
+  the core belief?" Current episode only. Include a shift in these beliefs (e.g., during a
+  low period) ONLY if the TEXT itself describes one.
+
+- "coping_strategies": box. "Which patterns of behavior do they use to cope with the
+  belief(s)?"
+
+- "life_history": box. "Which experiences contributed to the development and maintenance of
+  the core belief(s)?" plus the precipitant(s) of the current difficulty. Biographical facts
+  and events only. A single post often supports only the precipitants — that is acceptable.
+
+NAME: {name}
+TEXT:
 {patient_text}
 """
 
 
-def _ccd_psi_prompt(patient_text: str, template: str = None) -> str:
-    return (template or BUILD_CCD_PROMPT_PSI).format(
-        helpless=_bullet(PSI_CORE_BELIEFS["helpless"]),
-        unlovable=_bullet(PSI_CORE_BELIEFS["unlovable"]),
-        worthless=_bullet(PSI_CORE_BELIEFS["worthless"]),
-        emotions=_bullet(PSI_EMOTIONS),
-        patient_text=patient_text,
-    )
+def _ccd_psi_prompt(patient_text: str, template: str = None, name: str = "") -> str:
+    # 用 .replace 而非 .format:新版 prompt 內含字面 JSON 大括號({"text":...}),str.format 會炸。
+    # 仍保留舊封閉集佔位符的替換,讓自訂/舊 prompt(若含 {helpless} 等)也能正確套版。
+    tmpl = template or BUILD_CCD_PROMPT_PSI
+    return (tmpl
+            .replace("{helpless}", _bullet(PSI_CORE_BELIEFS["helpless"]))
+            .replace("{unlovable}", _bullet(PSI_CORE_BELIEFS["unlovable"]))
+            .replace("{worthless}", _bullet(PSI_CORE_BELIEFS["worthless"]))
+            .replace("{emotions}", _bullet(PSI_EMOTIONS))
+            .replace("{name}", name or "")
+            .replace("{patient_text}", patient_text))
 
 
 _ccd_psi_cache = {}
 
 
-def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
-    """post → Patient-Ψ 結構化 CCD(dict)。回傳 (cm_dict, info)。
+def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
+    """post → Beck 結構化 CCD(dict)。回傳 (cm_dict, info)。
 
-    cm_dict 含上述 JSON keys;core_beliefs / emotion 落在封閉集內,供自動 F1。
-    ccd_prompt: 自訂 CCD 建構 prompt(需保留 {helpless}{unlovable}{worthless}{emotions}{patient_text}
-    佔位符);None 則用預設 BUILD_CCD_PROMPT_PSI。同一篇 post + 同一份 prompt 走記憶體快取。
+    cm_dict 含上述 JSON keys;core_belief.label / emotion.label 落在封閉集內,供自動 F1。
+    ccd_prompt: 自訂 CCD 建構 prompt(需保留 {helpless}{unlovable}{worthless}{emotions}{name}{patient_text}
+    佔位符);None 則用預設 BUILD_CCD_PROMPT_PSI。
+    name: 要 grounding 的顯示名(填入 CCD 的 "name",修掉「顯示名≠CCD 內部名」的 bug);None 交給模型自行取名。
+    同一篇 post + 同一份 prompt + 同一個 name 走記憶體快取。
     """
     ccd_prompt = ccd_prompt or BUILD_CCD_PROMPT_PSI
-    key = hashlib.sha256((ccd_prompt + "\x00" + post_text.strip()).encode("utf-8")).hexdigest()
+    key = hashlib.sha256(
+        (ccd_prompt + "\x00" + (name or "") + "\x00" + post_text.strip()).encode("utf-8")
+    ).hexdigest()
     if key in _ccd_psi_cache:
         return _ccd_psi_cache[key], {"latency": 0.0, "cached": True,
                                      "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
@@ -306,7 +368,7 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": "You reconstruct Beck cognitive conceptualization diagrams and reply with a single JSON object."},
-            {"role": "user", "content": _ccd_psi_prompt(post_text, ccd_prompt)},
+            {"role": "user", "content": _ccd_psi_prompt(post_text, ccd_prompt, name=name or "")},
         ],
     )
     latency = time.perf_counter() - t0
@@ -316,6 +378,12 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
         cm = json.loads(raw)
     except Exception as e:
         raise ValueError(f"Patient-Ψ CCD JSON parse failed: {e}. Raw head: {raw[:200]}")
+    if isinstance(cm, dict):
+        # name grounding:顯示名優先蓋過模型自取的名字,確保 CCD 內部名＝顯示名。
+        if name:
+            cm["name"] = name
+        # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
+        cm.setdefault("prompt_version", "beck-aligned-v1")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
 
@@ -330,21 +398,23 @@ PSI_PATIENT_TYPES = {
     "pleasing": "You should try your best to act like an pleasing patient: 1) you may minimize or downplay your own concerns or symptoms to maintain a positive image, 2) you may demonstrate eager-to-please behavior and avoid expressing disagreement or dissatisfaction, 3) you may seek approval or validation from the therapist frequently, and 4) you may agree with the therapist's statements or suggestions readily, even if they may not fully understand or agree. But you must not exceed 5 sentences each turn. Attention: The most important thing is to be as natural as possible and you should be pleasing in some turns and be normal in other turns. You could feel better as the session goes when you feel more trust in the therapist.",
 }
 
-# --- 病人角色扮演 system prompt(getDataFromKV.ts:formatPromptString,逐字移植)---
-PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are {name}, a patient who has been experiencing mental health challenges. You have been attending therapy sessions for several weeks. Your task is to engage in a conversation with the therapist as {name} would during a cognitive behavioral therapy (CBT) session. Align your responses with {name}'s background information provided in the 'Relevant history' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real patient would not explicitly think in those terms.
+# --- 角色扮演 system prompt(改編自 getDataFromKV.ts:formatPromptString)-----------
+# 對齊 Beck worksheet & 去病理化:(1) 開頭不再預設「病人/看診數週」;(2) 移除「during
+# Depression」那格;(3) 補「Meaning of Automatic Thought」;(4) history 標籤與內文自稱一致。
+PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are {name}, the person described below, who has been going through something difficult lately and has agreed to talk it through with a supportive listener. Your task is to engage in the conversation as {name} would. Align your responses with {name}'s background information provided in the 'Relevant History' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real person would not explicitly think in those terms.
 
-Patient History: {history}
+Relevant History: {history}
 
 Cognitive Conceptualization Diagram:
 Core Beliefs: {core_belief}
 Intermediate Beliefs: {intermediate_belief}
-Intermediate Beliefs during Depression: {intermediate_belief_depression}
 Coping Strategies: {coping_strategies}
 
-You will be asked about your experiences over the past week. Engage in a conversation with the therapist regarding the following situation and behavior. Use the provided emotions and automatic thoughts as a reference, but do not disclose the cognitive conceptualization diagram directly. Instead, allow your responses to be informed by the diagram, enabling the therapist to infer your thought processes.
+You will be asked about your experiences over the past week. Engage in the conversation regarding the following situation and behavior. Use the provided emotions and automatic thoughts as a reference, but do not disclose the cognitive conceptualization diagram directly. Instead, allow your responses to be informed by the diagram, enabling the listener to infer your thought processes.
 
 Situation: {situation}
 Automatic Thoughts: {auto_thoughts}
+Meaning of Automatic Thought: {meaning}
 Emotions: {emotion}
 Behavior: {behavior}
 
@@ -365,6 +435,50 @@ def _as_text(v):
     return str(v or "")
 
 
+# --- box 存取器(同時吃三種形)-----------------------------------------------
+# ① Stage-1 box:{"text","grounding","evidence"}(新版 beck-aligned prompt 的每一格)。
+# ② dual-field:core_belief={"verbatim","label"}、emotion={"verbatim","label"}(前一版)。
+# ③ 舊 flat:core_beliefs=list、emotion=list/str、situation=str(personas.json / Abe)。
+# 這些存取器讓三種形都能正確攤成文字,舊快取/library 不會壞。
+def _box_text(v) -> str:
+    """把任一格值攤成「本人原話」字串:box 取 text、dual-field 取 verbatim/label、其餘照舊。"""
+    if isinstance(v, dict):
+        return _as_text(v.get("text") or v.get("verbatim") or v.get("label"))
+    return _as_text(v)
+
+
+def _core_belief_text(cm: dict) -> str:
+    """核心信念的「本人原話」(保主體性);box 取 text,dual-field 取 verbatim,舊形退回 core_beliefs。"""
+    cb = cm.get("core_belief")
+    if isinstance(cb, dict):
+        return _as_text(cb.get("text") or cb.get("verbatim") or cb.get("label"))
+    return _as_text(cm.get("core_beliefs") or cb)
+
+
+def _core_belief_labels(cm: dict):
+    """核心信念的封閉集 label(供 F1);新形取 label,舊形退回 core_beliefs。"""
+    cb = cm.get("core_belief")
+    if isinstance(cb, dict):
+        return cb.get("label")
+    return cm.get("core_beliefs") or cb
+
+
+def _emotion_text(m: dict) -> str:
+    """單一 cognitive model 的情緒「本人原話」;box 取 text,dual-field 取 verbatim,舊形退回 emotion。"""
+    emo = m.get("emotion")
+    if isinstance(emo, dict):
+        return _as_text(emo.get("text") or emo.get("verbatim") or emo.get("label"))
+    return _as_text(emo)
+
+
+def _emotion_labels(m: dict):
+    """單一 cognitive model 的情緒封閉集 label(供 F1);新形取 label,舊形退回 emotion。"""
+    emo = m.get("emotion")
+    if isinstance(emo, dict):
+        return emo.get("label")
+    return emo
+
+
 def _cognitive_models(cm: dict) -> list:
     """回傳 cognitive model 清單(每個含 situation/automatic_thoughts/emotion/behavior)。
 
@@ -377,33 +491,131 @@ def _cognitive_models(cm: dict) -> list:
     return [{
         "situation": cm.get("situation"),
         "automatic_thoughts": cm.get("automatic_thoughts") or cm.get("auto_thoughts"),
+        "meaning_of_automatic_thought": cm.get("meaning_of_automatic_thought") or "",
         "emotion": cm.get("emotion"),
         "behavior": cm.get("behavior"),
     }]
 
 
+def _dual_line(text: str, label) -> str:
+    """dual-field 顯示:本人原話為主,封閉集 label 以中括號附註(供對照/評分)。"""
+    text = text or "(none)"
+    lab = _as_text(label)
+    return f"{text}  [closed-set: {lab}]" if lab else text
+
+
+def _is_box(v) -> bool:
+    """是否為 Stage-1 box(帶 text/grounding 的 dict),用來和 dual-field/舊形區分。"""
+    return isinstance(v, dict) and ("text" in v or "grounding" in v)
+
+
+def _box_display(v) -> str:
+    """cm_to_text 用:Stage-1 box → 文字 +([stated]/[inferred])grounding 標記,供 CCD↔post 對照;
+    dual-field / 舊形則退回純文字。"""
+    if _is_box(v):
+        txt = _as_text(v.get("text")) or "(none)"
+        g = v.get("grounding")
+        return f"{txt}  [{g}]" if g else txt
+    return _box_text(v) or "(none)"
+
+
+def _core_belief_display(cm: dict) -> str:
+    cb = cm.get("core_belief")
+    if _is_box(cb):
+        return _box_display(cb)
+    return _dual_line(_core_belief_text(cm), _core_belief_labels(cm))
+
+
+def _emotion_display(m: dict) -> str:
+    emo = m.get("emotion")
+    if _is_box(emo):
+        return _box_display(emo)
+    return _dual_line(_emotion_text(m), _emotion_labels(m))
+
+
 def cm_to_text(cm: dict) -> str:
     """把結構化 CCD(dict)攤成一份「給人看的」唯讀文字(dashboard 顯示/匯出用)。
 
-    情境段落列出所有 cognitive model(官方 CCD 應有 ≥3 個)。
+    對齊 Beck 2020 worksheet 的欄位順序:Life History → Core Belief → Intermediate
+    Beliefs → Coping Strategies → 每個情境 Situation → Automatic Thought → Meaning of
+    A.T. → Emotion → Behavior。Stage-1 box 附 [stated]/[inferred] 標記,dual-field 附封閉集 label。
     """
-    head = [
-        ("Patient History", "life_history"),
-        ("Core Beliefs", "core_beliefs"),
-        ("Intermediate Beliefs", "intermediate_beliefs"),
-        ("Intermediate Beliefs during Depression", "intermediate_beliefs_during_depression"),
-        ("Coping Strategies", "coping_strategies"),
+    lines = [
+        f"Relevant Life History & Precipitants: {_box_display(cm.get('life_history'))}",
+        f"Core Belief(s): {_core_belief_display(cm)}",
+        f"Intermediate Beliefs (Assumptions/Attitudes/Rules): {_box_display(cm.get('intermediate_beliefs'))}",
+        f"Coping Strategies: {_box_display(cm.get('coping_strategies'))}",
     ]
-    lines = [f"{label}: {_as_text(cm.get(key)) or '(none)'}" for label, key in head]
     models = _cognitive_models(cm)
     for i, m in enumerate(models, 1):
         tag = f" #{i}" if len(models) > 1 else ""
-        lines.append(f"Situation{tag}: {_as_text(m.get('situation')) or '(none)'}")
-        lines.append(f"Automatic Thoughts{tag}: "
-                     f"{_as_text(m.get('automatic_thoughts') or m.get('auto_thoughts')) or '(none)'}")
-        lines.append(f"Emotions{tag}: {_as_text(m.get('emotion')) or '(none)'}")
-        lines.append(f"Behaviors{tag}: {_as_text(m.get('behavior')) or '(none)'}")
+        lines.append(f"Situation{tag}: {_box_display(m.get('situation'))}")
+        lines.append(f"Automatic Thought(s){tag}: "
+                     f"{_box_display(m.get('automatic_thoughts') or m.get('auto_thoughts'))}")
+        lines.append(f"Meaning of A.T.{tag}: {_box_display(m.get('meaning_of_automatic_thought'))}")
+        lines.append(f"Emotion{tag}: {_emotion_display(m)}")
+        lines.append(f"Behavior{tag}: {_box_display(m.get('behavior'))}")
     return "\n".join(lines)
+
+
+# --- grounding 稽核(零 API):比對 Stage-1 CCD 每個 box 是否貼合原 post -----------------
+_CCD_BOX_KEYS_TOP = ["life_history", "core_belief", "intermediate_beliefs", "coping_strategies"]
+_CCD_BOX_KEYS_CM = ["situation", "automatic_thoughts", "meaning_of_automatic_thought",
+                    "emotion", "behavior"]
+
+
+def _iter_boxes(cm: dict):
+    """走訪 CCD 內所有 Stage-1 box,yield (欄位名, box)。非 box 形(dual-field/舊)自動略過。"""
+    for k in _CCD_BOX_KEYS_TOP:
+        if _is_box(cm.get(k)):
+            yield k, cm[k]
+    for i, m in enumerate(cm.get("cognitive_models") or []):
+        if not isinstance(m, dict):
+            continue
+        for k in _CCD_BOX_KEYS_CM:
+            if _is_box(m.get(k)):
+                yield f"cognitive_models[{i}].{k}", m[k]
+
+
+def grounding_report(cm: dict, post_text: str) -> dict:
+    """零 API 對照 CCD↔origin post(回應 advisor「compare your CCD with the origin post」):
+      - stated 格:每條 evidence 必為 post 的精確子字串(且非空)才算 pass。
+      - inferred 格:box text 應以 '?' 標記(worksheet 要求)。
+      - insufficient 格:text 以 'insufficient' 開頭 / grounding 為 null,單獨計。
+    回傳 {"summary": {...}, "rows": [...]};summary 可直接印給 advisor。
+    """
+    rows = []
+    for name, b in _iter_boxes(cm):
+        text = _as_text(b.get("text"))
+        ev = b.get("evidence") or []
+        if isinstance(ev, str):
+            ev = [ev]
+        g = b.get("grounding")
+        if text.strip().lower().startswith("insufficient") or g is None:
+            status, ok = "insufficient", None
+        elif g == "stated":
+            status = "stated"
+            ok = bool(ev) and all(str(q) in post_text for q in ev)
+        elif g == "inferred":
+            status = "inferred"
+            ok = text.rstrip().endswith("?")
+        else:
+            status, ok = str(g), None
+        rows.append({
+            "box": name, "grounding": status, "ok": ok, "n_evidence": len(ev),
+            "bad_evidence": [str(q) for q in ev if str(q) not in post_text] if status == "stated" else [],
+        })
+    stated = [r for r in rows if r["grounding"] == "stated"]
+    inferred = [r for r in rows if r["grounding"] == "inferred"]
+    summary = {
+        "n_boxes": len(rows),
+        "stated_total": len(stated),
+        "stated_pass": sum(1 for r in stated if r["ok"]),
+        "inferred_total": len(inferred),
+        "inferred_marked": sum(1 for r in inferred if r["ok"]),
+        "insufficient": sum(1 for r in rows if r["grounding"] == "insufficient"),
+    }
+    return {"summary": summary, "rows": rows}
 
 
 def psi_persona_system(cm: dict, style: str = "plain", name: str = None,
@@ -420,16 +632,18 @@ def psi_persona_system(cm: dict, style: str = "plain", name: str = None,
     models = _cognitive_models(cm)
     m = models[cm_index] if 0 <= cm_index < len(models) else (models[0] if models else {})
     return tmpl.format(
-        name=name or cm.get("name") or "the patient",
-        history=_as_text(cm.get("life_history") or cm.get("history")),
-        core_belief=_as_text(cm.get("core_beliefs")),
-        intermediate_belief=_as_text(cm.get("intermediate_beliefs")),
-        intermediate_belief_depression=_as_text(cm.get("intermediate_beliefs_during_depression")),
-        coping_strategies=_as_text(cm.get("coping_strategies")),
-        situation=_as_text(m.get("situation")),
-        auto_thoughts=_as_text(m.get("automatic_thoughts") or m.get("auto_thoughts")),
-        emotion=_as_text(m.get("emotion")),
-        behavior=_as_text(m.get("behavior")),
+        name=name or cm.get("name") or "the person",
+        history=_box_text(cm.get("life_history") or cm.get("history")),
+        # 用「本人原話」(box text / verbatim)餵角色扮演,persona 才不會照唸封閉集 label,
+        # 也不會把 {'text':...} 這種 dict 字面印進 prompt。
+        core_belief=_core_belief_text(cm),
+        intermediate_belief=_box_text(cm.get("intermediate_beliefs")),
+        coping_strategies=_box_text(cm.get("coping_strategies")),
+        situation=_box_text(m.get("situation")),
+        auto_thoughts=_box_text(m.get("automatic_thoughts") or m.get("auto_thoughts")),
+        meaning=_box_text(m.get("meaning_of_automatic_thought")),
+        emotion=_emotion_text(m),
+        behavior=_box_text(m.get("behavior")),
         # 官方 formatPromptString:plain 對應空字串(guideline 1 留空),忠實照 paper。
         style_content=style_content,
     )
@@ -658,8 +872,8 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
     if mode == MODE_CCD:
         # Method A 走 Patient-Ψ 結構化路徑:post → 結構化 CCD(dict)→ 逐欄位填入
         # 官方病人 system prompt。style 直接對應官方 PSI_PATIENT_TYPES(鍵名與 UI 相同)。
-        cm, info = generate_ccd_psi(post_text, ccd_prompt)
-        name = name or cm.get("name") or "the patient"
+        cm, info = generate_ccd_psi(post_text, ccd_prompt, name=name)
+        name = name or cm.get("name") or "the person"
         system = psi_persona_system(cm, style=style, name=name,
                                     template=persona_prompt or PSI_PERSONA_SYSTEM_TEMPLATE,
                                     cm_index=cm_index)
