@@ -38,15 +38,12 @@ persona-dashboard/                  ← repo root（＝ Streamlit 主程式所�
 ├── patients_ccd/                   Method A 生成的 CCD 存檔（執行時產生，已 gitignore）
 │
 ├── tests/                          pytest（test_persona_core.py）
-├── scripts/                        輔助腳本（ab_test.py）
-├── felix_files/Phase2/             ClusterSearch 研究：notebook + 分群 assets
+├── demo_ccd_max.py                 Max demo：post → Beck CCD → grounding 稽核 → chat
 │
 ├── docs/                           文件
 │   ├── DEPLOY.md                   部署 / 更新流程（Streamlit Cloud）
 │   ├── pipeline.md                 兩條 pipeline 的設計說明
-│   ├── ab_test_transcript.md       Method A vs B 對話實測逐字稿
-│   ├── chatbot_pipeline_slide.html pipeline 簡報
-│   └── archive/                    過期的自動執行報告（歷史存查）
+│   └── BUILD_CCD_PROMPT_beck_aligned.md  CCD prompt 逐條對照 Beck 2020 worksheet
 │
 ├── requirements.txt                部署相依（streamlit / openai / python-dotenv）
 ├── requirements-dev.txt            開發相依（+ pytest）
