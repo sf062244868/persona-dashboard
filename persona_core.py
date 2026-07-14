@@ -577,13 +577,24 @@ def _iter_boxes(cm: dict):
                 yield f"cognitive_models[{i}].{k}", m[k]
 
 
+def _norm_q(s: str) -> str:
+    """near-verbatim 用的正規化:casefold + 收斂空白 + 去頭尾與結尾標點。
+    用來區分「模型憑空捏造」與「只是大小寫/標點/空白微調的同一句引文」。"""
+    s = " ".join(str(s or "").split()).casefold()
+    return s.strip(" .,!?;:“”\"'")
+
+
 def grounding_report(cm: dict, post_text: str) -> dict:
     """零 API 對照 CCD↔origin post(回應 advisor「compare your CCD with the origin post」):
-      - stated 格:每條 evidence 必為 post 的精確子字串(且非空)才算 pass。
+      - stated 格:evidence 是否為 post 的引文。分兩級:
+          * exact  = 逐字精確子字串(最嚴格);
+          * near   = 正規化後(去大小寫/標點/空白)仍能對上 → 近似逐字(非捏造,只是微調)。
+        兩者都對不上才算「fabricated(憑空)」。
       - inferred 格:box text 應以 '?' 標記(worksheet 要求)。
       - insufficient 格:text 以 'insufficient' 開頭 / grounding 為 null,單獨計。
     回傳 {"summary": {...}, "rows": [...]};summary 可直接印給 advisor。
     """
+    post_norm = _norm_q(post_text)
     rows = []
     for name, b in _iter_boxes(cm):
         text = _as_text(b.get("text"))
@@ -591,26 +602,33 @@ def grounding_report(cm: dict, post_text: str) -> dict:
         if isinstance(ev, str):
             ev = [ev]
         g = b.get("grounding")
+        near = None
+        fabricated = []
         if text.strip().lower().startswith("insufficient") or g is None:
             status, ok = "insufficient", None
         elif g == "stated":
             status = "stated"
-            ok = bool(ev) and all(str(q) in post_text for q in ev)
+            ok = bool(ev) and all(str(q) in post_text for q in ev)          # 逐字精確
+            near = bool(ev) and all(_norm_q(q) in post_norm for q in ev)     # 近似逐字
+            fabricated = [str(q) for q in ev if _norm_q(q) not in post_norm]  # 兩級都對不上=憑空
         elif g == "inferred":
             status = "inferred"
             ok = text.rstrip().endswith("?")
         else:
             status, ok = str(g), None
         rows.append({
-            "box": name, "grounding": status, "ok": ok, "n_evidence": len(ev),
-            "bad_evidence": [str(q) for q in ev if str(q) not in post_text] if status == "stated" else [],
+            "box": name, "grounding": status, "ok": ok, "near": near, "n_evidence": len(ev),
+            # bad_evidence 只留「連近似都對不上」的,才是真正憑空;大小寫/標點微調不算。
+            "bad_evidence": fabricated,
         })
     stated = [r for r in rows if r["grounding"] == "stated"]
     inferred = [r for r in rows if r["grounding"] == "inferred"]
     summary = {
         "n_boxes": len(rows),
         "stated_total": len(stated),
-        "stated_pass": sum(1 for r in stated if r["ok"]),
+        "stated_pass": sum(1 for r in stated if r["ok"]),          # 逐字精確
+        "stated_near": sum(1 for r in stated if r["near"]),        # 逐字或近似(可回溯原文)
+        "stated_fabricated": sum(1 for r in stated if r["bad_evidence"]),  # 憑空
         "inferred_total": len(inferred),
         "inferred_marked": sum(1 for r in inferred if r["ok"]),
         "insufficient": sum(1 for r in rows if r["grounding"] == "insufficient"),
