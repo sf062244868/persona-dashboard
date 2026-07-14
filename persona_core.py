@@ -246,82 +246,57 @@ def _bullet(items):
 #   - 兩段式:Stage 1 只做「post → 自由文字 CCD」,封閉集 label 交給獨立的 Stage 2 外掛。
 #   - 每格是可稽核 box:{"text","grounding":"stated"|"inferred","evidence":[原文精確子字串]}。
 #     stated 的 evidence 必為 post 的逐字子字串 → 讓「CCD vs origin post」能字串比對(見 grounding_report)。
-#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name grounding、禁用 "Alex"。
+#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name 直接用外部傳入的 NAME(lean-v2)。
 #   - 佔位符只剩 {name}{patient_text}(舊的 {helpless}{unlovable}{worthless}{emotions} 已移除)。
 #   ⚠ prompt 內含字面 JSON 大括號,務必用 _ccd_psi_prompt 的 .replace 套版,不可用 str.format。
-BUILD_CCD_PROMPT_PSI = """You are completing a Beck Institute (Traditional) Cognitive Conceptualization Diagram (CCD)
-for the person who wrote the TEXT below, following the CBT Worksheet Packet (J. Beck, 2020),
-Traditional CCD section. A CCD is a set of working hypotheses that organizes what the person
-actually wrote; it is NOT a diagnosis. Do not assume depression or any disorder. If the TEXT
-itself states a diagnosis or clinical fact, record it faithfully — but never add one.
+BUILD_CCD_PROMPT_PSI = """Complete a Beck (Traditional) Cognitive Conceptualization Diagram (CCD) for the person who
+wrote the TEXT below (CBT Worksheet Packet, J. Beck, 2020). A CCD is a set of working
+hypotheses, not a diagnosis: do not attribute depression or any disorder unless the TEXT
+states it.
 
-GROUNDING RULES
-1. The diagram must be based on specific information the person provides. Work ONLY from
-   the TEXT.
-2. Every CCD box is one of two kinds:
-   - "stated": the box restates something the person wrote. Its "evidence" list must contain
-     EXACT substrings copied verbatim from the TEXT (they will be checked by string match).
-   - "inferred": a hypothesis of yours. Append " ?" to the box text — the worksheet requires
-     hypotheses to be marked (e.g., with a question mark) and treated as tentative until the
-     client confirms them. This person cannot confirm them, so keep every hypothesis modest
-     and close to the TEXT, and still list the exact quotes that motivated it in "evidence".
-3. If a box cannot be grounded at all, set its text to "insufficient information" and leave
-   "evidence" empty. An honest empty box is correct; a filled ungrounded box is an error.
-4. The person's self-evaluations (e.g., "I'm a burden") are BELIEF material, not biographical
-   fact: they belong in the belief boxes (core belief / intermediate beliefs / meaning), never
-   in life history.
+GROUNDING
+- Work only from the TEXT.
+- Every box is either "stated" (restates the TEXT; "evidence" = exact substrings from the
+  TEXT, checked by string match) or "inferred" (your hypothesis; append " ?" to the text and
+  put the quotes that motivated it in "evidence").
+- If a box cannot be grounded, use {"text": "insufficient information", "grounding": null,
+  "evidence": []}. An empty box is correct; a filled ungrounded box is an error.
+- The person's self-evaluations (e.g., "I'm a burden") belong in the belief boxes, never in
+  life_history.
 
-ORDER OF WORK — bottom-up, as the worksheet instructs ("start midway down the page")
-First identify the problematic situation(s), then the automatic thoughts, then what each
-thought meant to the person; ascertaining the meaning of the automatic thoughts across the
-situations should lead to your hypothesis about the core belief. Only then complete the top
-boxes. Generate the JSON keys strictly in the order given below — it enforces this order
-of work.
+ORDER OF WORK (bottom-up)
+Situations -> automatic thoughts -> their meaning -> only then hypothesize the core belief
+and complete the top boxes. Generate the JSON keys in exactly the order given below.
 
-SITUATION COUNT
-Choose situations in which the person displays a pattern of unhelpful behavior or in which
-their automatic thoughts show common themes; if there is more than one theme, include a
-situation that reflects it. One situation box per theme the TEXT actually grounds — a
-single-theme post yields ONE box. Never invent situations to fill a quota.
+SITUATIONS
+One situation box per distinct theme grounded in the TEXT; a single-theme post yields one box.
 
 OUTPUT
-Return a SINGLE JSON object (no markdown fences). Every CCD box is an object:
-  {"text": string, "grounding": "stated" | "inferred", "evidence": [exact quotes from TEXT]}
-For an empty box use {"text": "insufficient information", "grounding": null, "evidence": []}.
+A single JSON object, no markdown fences. Each CCD box is:
+  {"text": str, "grounding": "stated" | "inferred", "evidence": [exact quotes from TEXT]}
 
-Keys, in this exact generation order:
-
-- "name": string. Use the NAME provided below verbatim if given; otherwise a plausible first
-  name grounded in the TEXT. Never use "Alex".
-
+Keys, in generation order:
+- "name": the NAME provided below, verbatim.
 - "themes": array of short strings — the distinct problematic theme(s) the TEXT grounds.
-
-- "cognitive_models": array, ONE object per theme, each with:
-    - "situation": box. "What was the problematic situation?" One specific moment or event
-      from the TEXT, not a general ongoing state.
-    - "automatic_thoughts": box. "What went through the person's mind?" The surface words in
-      that moment. This is NOT the core belief; if the TEXT records no in-the-moment thought,
-      write "insufficient information" rather than promoting a conclusion into this box.
-    - "meaning_of_automatic_thought": box. "What did the automatic thought mean to them?"
-      The bridge from that surface thought toward a belief about the self. Usually "inferred".
-    - "emotion": box. "What emotion was associated with the automatic thought?" The feeling
-      word(s) the person used or clearly implied, as free text — there is no fixed list.
-    - "behavior": box. "What did the person do then?"
-
-- "core_belief": box. "What is the person's most central dysfunctional belief about
-  themself?" State it in the person's own framing, derived FROM the meanings above. This is
-  almost always "inferred" (with " ?").
-
-- "intermediate_beliefs": box. "Which assumptions, rules and attitudes help them cope with
-  the core belief?" Current episode only. Include a shift in these beliefs (e.g., during a
-  low period) ONLY if the TEXT itself describes one.
-
-- "coping_strategies": box. "Which patterns of behavior do they use to cope with the
-  belief(s)?"
-
-- "life_history": box. "Which experiences contributed to the development and maintenance of
-  the core belief(s)?" plus the precipitant(s) of the current difficulty. Biographical facts
-  and events only. A single post often supports only the precipitants — that is acceptable.
+- "cognitive_models": array, one object per theme:
+    - "situation": "What was the problematic situation?" — one specific moment, not an
+      ongoing state.
+    - "automatic_thoughts": "What went through the person's mind?" — the surface words in
+      that moment, NOT the core belief; if the TEXT records none, use "insufficient
+      information".
+    - "meaning_of_automatic_thought": "What did the automatic thought mean to them?" — the
+      bridge toward a belief about the self; usually "inferred".
+    - "emotion": "What emotion was associated with the automatic thought?" — the person's
+      own feeling word(s), free text.
+    - "behavior": "What did the person do then?"
+- "core_belief": "What is the person's most central dysfunctional belief about themself?" —
+  in their own framing, derived from the meanings above; almost always "inferred".
+- "intermediate_beliefs": "Which assumptions, rules and attitudes help them cope with the
+  core belief?" — current episode; include a low-period shift only if the TEXT describes one.
+- "coping_strategies": "Which patterns of behavior do they use to cope with the belief(s)?"
+- "life_history": "Which experiences contributed to the development and maintenance of the
+  core belief(s)?" plus the precipitant(s) of the current difficulty — biographical facts
+  only; precipitants alone are acceptable.
 
 NAME: {name}
 TEXT:
@@ -383,7 +358,7 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
         if name:
             cm["name"] = name
         # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
-        cm.setdefault("prompt_version", "beck-aligned-v1")
+        cm.setdefault("prompt_version", "beck-aligned-lean-v2")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
 
