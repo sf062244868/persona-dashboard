@@ -125,3 +125,41 @@ def test_macro_f1_perfect_and_skips_absent_labels():
     labels = ["a", "b", "c", "d"]      # d 從沒出現 → 應跳過、不拉低分母
     pairs = [({"a"}, {"a"}), ({"b"}, {"b"})]
     assert rq2.macro_f1(pairs, labels) == 1.0
+
+
+# 新版 Beck-aligned Stage-1 CCD:每格是 {text,grounding,evidence} box、無封閉集 label。
+NEW_BOX_CCD = {
+    "name": "Max",
+    "cognitive_models": [{
+        "situation": {"text": "Mostly by myself", "grounding": "stated", "evidence": []},
+        "automatic_thoughts": {"text": "I can't connect", "grounding": "stated", "evidence": []},
+        "emotion": {"text": "lonely", "grounding": "stated", "evidence": []},
+        "behavior": {"text": "Withdrew further", "grounding": "stated", "evidence": []},
+    }],
+    "core_belief": {"text": "Something about me can't connect ?", "grounding": "inferred", "evidence": []},
+    "intermediate_beliefs": {"text": "Sharing = being a burden ?", "grounding": "inferred", "evidence": []},
+    "coping_strategies": {"text": "Improves alone", "grounding": "stated", "evidence": []},
+    "life_history": {"text": "90% alone since university", "grounding": "stated", "evidence": []},
+    "prompt_version": "beck-aligned-v1",
+}
+
+
+def test_gt_text_box_shape_no_crash():
+    """新版 box 形不可讓 gt_text 對 dict 呼叫 .strip() 而崩潰;要攤出 box 的 text。"""
+    t = rq2.gt_text(NEW_BOX_CCD)
+    assert t["situation"] == "Mostly by myself"
+    assert t["automatic_thoughts"] == "I can't connect"
+    assert t["behaviors"] == "Withdrew further"
+    assert t["coping_strategies"] == "Improves alone"
+
+
+def test_closed_set_returns_none_for_new_box():
+    """新版 box 無封閉集 label → gt_beliefs/gt_emotions 回 None(F1 track 會被跳過)。"""
+    assert rq2.gt_beliefs(NEW_BOX_CCD) is None
+    assert rq2.gt_emotions(NEW_BOX_CCD) is None
+
+
+def test_closed_set_still_works_for_old_flat():
+    """舊 flat 形維持原行為:回傳對齊封閉集的集合。"""
+    assert rq2.gt_beliefs(FAKE_CCD) == {"I am unlovable.", "I am bound to be alone."}
+    assert rq2.gt_emotions(FAKE_CCD) is not None and len(rq2.gt_emotions(FAKE_CCD)) >= 1

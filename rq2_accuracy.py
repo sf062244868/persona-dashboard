@@ -80,13 +80,15 @@ def cm0(ccd: dict) -> dict:
 
 def gt_text(ccd: dict) -> dict:
     m = cm0(ccd)
+    # core._box_text 同時吃三種 CCD 形:新版 {text,grounding,evidence} box / dual-field
+    # {verbatim,label} / 舊 flat 純字串。避免對 dict 直接呼叫 .strip() 而崩潰。
+    bt = core._box_text
     return {
-        "situation": (m.get("situation") or "").strip(),
-        "coping_strategies": (ccd.get("coping_strategies") or "").strip(),
-        "intermediate_beliefs": (ccd.get("intermediate_beliefs") or "").strip(),
-        "automatic_thoughts": (m.get("automatic_thoughts")
-                               or m.get("auto_thoughts") or "").strip(),
-        "behaviors": (m.get("behavior") or "").strip(),
+        "situation": bt(m.get("situation")).strip(),
+        "coping_strategies": bt(ccd.get("coping_strategies")).strip(),
+        "intermediate_beliefs": bt(ccd.get("intermediate_beliefs")).strip(),
+        "automatic_thoughts": bt(m.get("automatic_thoughts") or m.get("auto_thoughts")).strip(),
+        "behaviors": bt(m.get("behavior")).strip(),
     }
 
 
@@ -105,16 +107,31 @@ def _canon(values, labels):
     return out
 
 
-def gt_beliefs(ccd: dict) -> set:
-    return _canon(ccd.get("core_beliefs") or [], PSI_CORE_BELIEF_LABELS_)
+def gt_beliefs(ccd: dict):
+    """核心信念的封閉集真值集合;若 CCD 沒有 label 回 None(→ 封閉集 F1 track 跳過)。
+    有 label 的來源:dual-field 的 core_belief.label、或舊 flat 的 core_beliefs。
+    新版 Stage-1 box(core_belief={text,grounding,evidence})沒有 label → None。"""
+    cb = ccd.get("core_belief")
+    if isinstance(cb, dict):
+        lab = cb.get("label")
+        if not lab:
+            return None
+        return _canon(lab if isinstance(lab, (list, tuple)) else [lab], PSI_CORE_BELIEF_LABELS_)
+    vals = ccd.get("core_beliefs")
+    return _canon(vals, PSI_CORE_BELIEF_LABELS_) if vals else None
 
 
-def gt_emotions(ccd: dict) -> set:
-    m = cm0(ccd)
-    e = m.get("emotion") or []
+def gt_emotions(ccd: dict):
+    """情緒的封閉集真值集合;同 gt_beliefs,新版 box 無 label → 回 None。"""
+    e = cm0(ccd).get("emotion")
+    if isinstance(e, dict):
+        lab = e.get("label")
+        if not lab:
+            return None
+        return _canon(lab if isinstance(lab, (list, tuple)) else [lab], PSI_EMOTIONS_)
     if isinstance(e, str):
         e = [e]
-    return _canon(e, PSI_EMOTIONS_)
+    return _canon(e, PSI_EMOTIONS_) if e else None
 
 
 # --------------------------------------------------------------------------
@@ -356,6 +373,13 @@ def main():
                 ("core_beliefs", core.PSI_CORE_BELIEF_LABELS, gt_b),
                 ("emotions", core.PSI_EMOTIONS, gt_e),
             ]:
+                # 新版 Stage-1 CCD 沒有封閉集 label（gt_set=None）→ 跳過此 track，
+                # 不硬算出誤導的 0 分。等 Stage-2 labeler 補上 label 後才能復刻 Table 6 F1。
+                if gt_set is None:
+                    if args.dry_run:
+                        print(f"\n[DRY][{model}][{p['source_post_id']}][{field}] "
+                              f"跳過：此 CCD 無封閉集 label（新版 Stage-1，待 Stage-2 labeler）")
+                    continue
                 system, user = closed_prompts(field, convo, labels)
                 if args.dry_run:
                     print(f"\n[DRY][{model}][{p['source_post_id']}][{field}] "
