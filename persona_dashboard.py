@@ -1,21 +1,14 @@
 """
-persona_dashboard.py — Persona Generation Interface (single page, 3 tabs)
-========================================================================
+persona_dashboard.py — Persona Generation Interface (Build)
+===========================================================
 
-One coherent UI with a top tab bar — every capability is visible at a glance:
+Paste a post -> Method A (CCD) or B (direct) -> persona -> chat.
 
-  🛠 Build           paste a post -> Method A (CCD) or B (direct) -> persona -> chat
-  📚 Persona Library 16 pre-computed personas (personas.json) -> dropdown -> chat (cached)
-  🔎 Cluster Search  Felix's ClusterSearch API -> /pick -> existing CCD inference -> display
-
-Backend lives in persona_core.py (LLM/CCD) and cluster_api.py (Felix's API).
+Backend lives in persona_core.py (LLM/CCD).
 Run:   streamlit run persona_dashboard.py
 Needs: OPENAI_API_KEY (.env locally / Streamlit secrets on cloud).
-       Cluster Search also needs the ClusterSearch API (default http://localhost:8000).
 """
 
-import re
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -29,12 +22,8 @@ ensure_openai_key()
 check_password()
 
 import persona_core as core   # noqa: E402
-import cluster_api            # noqa: E402
-import persona_store          # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-PERSONAS_FILE = HERE / "personas.json"
-SELECTED_FILE = HERE / "selected_posts.json"
 
 # Two build methods (single-column result; A·B side-by-side removed).
 VIEW_A = "Method A (Post-CCD)"
@@ -135,21 +124,6 @@ def _meta_chips(info: dict) -> list:
         bits.append(f"🔢 {info['total_tokens']} tok")
         bits.append(f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
     return bits
-
-
-@st.cache_data
-def load_personas() -> list:
-    if not PERSONAS_FILE.exists():
-        return []
-    return json.loads(PERSONAS_FILE.read_text(encoding="utf-8")).get("personas", [])
-
-
-@st.cache_data
-def load_source_posts() -> dict:
-    if not SELECTED_FILE.exists():
-        return {}
-    data = json.loads(SELECTED_FILE.read_text(encoding="utf-8"))
-    return {p["post_id"]: p for p in data.get("posts", [])}
 
 
 # ===========================================================================
@@ -411,248 +385,8 @@ def render_build():
 
 
 # ===========================================================================
-# TAB 2 — Persona Library
-# ===========================================================================
-_SOURCE_BADGE = {"curated": "🌱 seed", "cluster-search": "🔎 added"}
-
-
-def sim_bar(sim: float, width: int = 10) -> str:
-    blocks = max(1, min(width, round((sim or 0) * width)))
-    return "█" * blocks + "░" * (width - blocks)
-
-
-def chips_html(items) -> str:
-    return " ".join(
-        f"<span style='background:#d6f0ec;color:#0f766e;border-radius:999px;"
-        f"padding:1px 9px;font-size:11px;margin-right:4px;white-space:nowrap'>{k}</span>"
-        for k in items)
-
-
-def render_ccd_sections(ccd: str):
-    """把 Beck CCD 拆成 5 段折疊卡片(抓不到分段就退回整段純文字)。"""
-    parts = re.split(r"(?m)^\s*(\d\.\s+[^\n]+?)\s*$", ccd)
-    if len(parts) <= 1:
-        with st.expander("CCD profile (Beck)"):
-            st.text(ccd)
-        return
-    if parts[0].strip():
-        st.caption(parts[0].strip())
-    for i in range(1, len(parts), 2):
-        head = parts[i].strip()
-        body = parts[i + 1].strip() if i + 1 < len(parts) else ""
-        with st.expander(head):
-            st.markdown(body if body else "_(empty)_")
-
-
-def render_persona_panel(rec, key_prefix, source_posts=None):
-    """共用的 persona 視圖 + 聊天(Library 與 Cluster Search 都用這個)。"""
-    method = st.radio("Roleplay basis", ["A", "B"], horizontal=True,
-                      format_func=lambda m: "A · via CCD" if m == "A" else "B · direct post",
-                      key=f"{key_prefix}_method",
-                      help="Which cached system prompt drives the chat.")
-    base_prompt = rec["method_a"]["persona_system"] if method == "A" else rec["method_b"]["persona_system"]
-    style, model = style_temp_controls(f"{key_prefix}_{rec['source_post_id']}")
-    st.caption(f"🧠 Replies use **{model}**")
-    # 這些 persona 是預先烘好的(personas.json),沒有 {style_block};直接把風格片段附加上去。
-    sb = core.style_block(style)
-    system_prompt = base_prompt + ("\n\nExtra:\n" + sb if sb else "")
-
-    badge = _SOURCE_BADGE.get(rec.get("source", "curated"), rec.get("source", ""))
-    st.markdown(f"### {rec['persona_name']}  <small style='color:#5b6b7a'>{badge}</small>",
-                unsafe_allow_html=True)
-    st.caption(f"{rec.get('cluster_group', '')} → **{rec.get('cluster', '')}** · {rec.get('subreddit', '')} · "
-               f"[source post]({rec.get('source_url', '')})")
-    st.info(rec["persona_content"])
-
-    chat_key = f"{key_prefix}_chat_{rec['source_post_id']}_{method}_{style}"
-    if chat_key not in st.session_state:
-        st.session_state[chat_key] = {"messages": [{"role": "system", "content": system_prompt}],
-                                      "history": []}
-    thread = st.session_state[chat_key]
-
-    st.markdown("##### Chat with this persona")
-    for role, text in thread["history"]:
-        with st.chat_message("user" if role == "you" else "assistant"):
-            st.write(text)
-    if st.button("🧹 Reset chat", key=f"{key_prefix}_reset"):
-        st.session_state[chat_key] = {"messages": [{"role": "system", "content": system_prompt}],
-                                      "history": []}
-        st.rerun()
-    user_input = st.chat_input("Say something to this persona…", key=f"{key_prefix}_chat_input")
-    if user_input:
-        thread["messages"].append({"role": "user", "content": user_input})
-        try:
-            reply, _info = core.chat_once(thread["messages"], model=model)
-        except Exception as e:
-            reply = f"(Error: {type(e).__name__}: {e})"
-        thread["messages"].append({"role": "assistant", "content": reply})
-        thread["history"].append(("you", user_input))
-        thread["history"].append(("persona", reply))
-        st.rerun()
-
-    with st.expander("Source post"):
-        src = (source_posts or {}).get(rec["source_post_id"])
-        st.markdown(f"**{rec['title']}**")
-        st.text(src["content"] if src else "(full text not stored for this one — see the source link)")
-    if rec["method_a"].get("ccd"):
-        st.markdown("**CCD profile (Beck · 5 sections)**")
-        render_ccd_sections(rec["method_a"]["ccd"])
-    with st.expander("System prompt in use (cached)"):
-        st.code(system_prompt, language="text")
-
-
-def render_library():
-    personas = load_personas()
-    source_posts = load_source_posts()
-    n_seed = sum(1 for p in personas if p.get("source", "curated") == "curated")
-    n_added = len(personas) - n_seed
-    st.caption(f"{len(personas)} personas in the library ({n_seed} seed · {n_added} added via Cluster Search). "
-               "Selecting one never re-calls the LLM; only chat does.")
-
-    if not personas:
-        st.warning("`personas.json` not found. Run `python build_personas.py` first.")
-        return
-
-    idx = st.selectbox(
-        "Persona", range(len(personas)),
-        format_func=lambda i: f"{i + 1:>2}. {_SOURCE_BADGE.get(personas[i].get('source','curated'),'')} "
-                              f"{personas[i]['persona_name']} — {personas[i]['cluster']} · {personas[i]['subreddit']}",
-        key="lib_idx")
-    render_persona_panel(personas[idx], "lib", source_posts)
-
-
-# ===========================================================================
-# TAB 3 — Cluster Search
-# ===========================================================================
-def render_cluster():
-    st.caption("Pick a cluster → fetch representative posts from Felix's ClusterSearch API → "
-               "run a post's prompt through the existing CCD inference → display the CCD.")
-
-    api_url = st.text_input("ClusterSearch API base URL", value=cluster_api.base_url(),
-                            help="Default CLUSTERSEARCH_API_URL or http://localhost:8000.",
-                            key="cs_api_url")
-    try:
-        h = cluster_api.health(api_url)
-        st.success(f"API ok · {h['clusters']} clusters · {h['pool_posts']:,} posts")
-        api_ok = True
-    except Exception as e:
-        st.error(f"API unreachable ({type(e).__name__}). On the cloud, point this at a public URL — "
-                 f"localhost is the remote machine only. Start it: `uvicorn api:app --port 8000`.")
-        st.caption(str(e))
-        api_ok = False
-
-    clusters = []
-    if api_ok:
-        try:
-            clusters = cluster_api.get_clusters(api_url)
-        except Exception as e:
-            st.error(f"Could not load clusters: {e}")
-
-    if clusters:
-        c1, c2, c3 = st.columns([3, 1, 1])
-        with c1:
-            ci = st.selectbox("Cluster", range(len(clusters)),
-                              format_func=lambda i: f"#{clusters[i]['id']} {clusters[i]['name']} "
-                                                    f"({clusters[i]['n_posts']} posts)",
-                              key="cs_cluster_i")
-        with c2:
-            n = st.slider("n posts", 1, 20, 5, key="cs_n")
-        with c3:
-            st.write("")
-            st.write("")
-            if st.button("🔎 Pick", type="primary", use_container_width=True):
-                try:
-                    with st.spinner("Calling /pick…"):
-                        st.session_state.cs_pick = cluster_api.pick(
-                            cluster_id=clusters[ci]["id"], n=n, override=api_url)
-                    st.session_state.cs_post_sel = 0
-                    st.session_state.pop("cs_persona", None)
-                except Exception as e:
-                    st.error(f"/pick failed: {e}")
-
-    pick = st.session_state.get("cs_pick")
-    if not pick:
-        st.info("Pick a cluster and click **Pick** to fetch posts.")
-        return
-
-    c = pick["cluster"]
-    posts, dropped_short, dropped_dup = core.filter_pick_posts(pick["posts"])
-    st.markdown(f"### Cluster: {c['name']}")
-    st.markdown(chips_html(c["keywords"]), unsafe_allow_html=True)
-    drop_note = (f" · quality gate dropped {dropped_short} short + {dropped_dup} dup"
-                 if (dropped_short or dropped_dup) else "")
-    st.caption(f"{c['n_matches']} above threshold {c['sim_threshold']} · "
-               f"{len(posts)} after quality gate{drop_note}")
-    if not posts:
-        st.warning("All returned posts were filtered out by the quality gate (too short / duplicate). "
-                   "Try a larger n or another cluster.")
-        return
-
-    sel = st.session_state.get("cs_post_sel", 0)
-    if sel >= len(posts):
-        sel = 0
-
-    left, right = st.columns([2, 3], gap="medium")
-
-    # --- left: scannable post list ---
-    with left:
-        st.markdown("**Matched posts** — pick one")
-        for i, p in enumerate(posts):
-            picked = (i == sel)
-            flag = " ⚠️" if p.get("safety_flag") else ""
-            st.markdown(f"{'▶ ' if picked else ''}**#{p['rank']}**{flag} `{sim_bar(p['similarity'])}` "
-                        f"{p['similarity']:.2f}  ·  r/{p['subreddit']}")
-            st.caption(p["title"][:80])
-            if not picked:
-                if st.button("選這篇", key=f"cs_sel_{i}", use_container_width=True):
-                    st.session_state.cs_post_sel = i
-                    st.rerun()
-            st.divider()
-
-    # --- right: selected post + persona ---
-    with right:
-        post = posts[sel]
-        st.markdown(f"**{post['title']}**  ·  [source]({post['url']})  ·  {post['word_count']} words  ·  "
-                    f"sim {post['similarity']:.3f}")
-        if post.get("safety_flag"):
-            st.warning("⚠️ This post may contain crisis content (self-harm / suicidal ideation). "
-                       "Review carefully before generating a persona for research use.")
-        with st.expander("Post body", expanded=True):
-            st.write(post["body"])
-
-        st.caption("Runs the **same** pipeline as the library: post → Patient-Ψ structured CCD → persona → profile.")
-        if st.button("🧠 Generate persona", type="primary", key="cs_gen"):
-            try:
-                with st.spinner("Building persona (gpt-4o: CCD + profile)…"):
-                    rec = core.build_persona_record(
-                        post_id=core.reddit_post_id(post["url"], post["prompt"]),
-                        subreddit=post["subreddit"], title=post["title"],
-                        content=post["prompt"], url=post["url"],
-                        cluster=c["name"], cluster_group=c["name"], source="cluster-search")
-                st.session_state.setdefault("cs_persona", {})[post["url"]] = rec
-            except Exception as e:
-                st.error(f"Persona build failed: {type(e).__name__}: {e}")
-
-        rec = st.session_state.get("cs_persona", {}).get(post["url"])
-        if rec:
-            st.divider()
-            render_persona_panel(rec, "cs")
-            if st.button("💾 Save to Library", key="cs_save",
-                         help="Append to personas.json (commit + push to reach the cloud)."):
-                added, msg = persona_store.append_persona(rec)
-                load_personas.clear()
-                (st.success if added else st.info)(msg)
-
-
-# ===========================================================================
-# LAYOUT — title + top tabs
+# LAYOUT — title
 # ===========================================================================
 st.title("Persona Generation Interface")
 
-tab_build, tab_lib, tab_cluster = st.tabs(["🛠 Build", "📚 Persona Library", "🔎 Cluster Search"])
-with tab_build:
-    render_build()
-with tab_lib:
-    render_library()
-with tab_cluster:
-    render_cluster()
+render_build()
