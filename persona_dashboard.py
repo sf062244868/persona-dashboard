@@ -267,7 +267,7 @@ def render_build():
         with b2:
             build = st.button("✨ Build", type="primary", use_container_width=True)
     with cR:
-        with st.expander("Method pipeline (A / B) — what each step calls", expanded=not has_persona()):
+        with st.expander("Method pipeline (A / B) — what each step calls", expanded=False):
             st.markdown(PIPELINE_HTML, unsafe_allow_html=True)
 
     # mode changed -> stale persona
