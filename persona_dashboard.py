@@ -9,6 +9,7 @@ Run:   streamlit run persona_dashboard.py
 Needs: OPENAI_API_KEY (.env locally / Streamlit secrets on cloud).
 """
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -172,8 +173,24 @@ def has_persona() -> bool:
     return bool(st.session_state.runs)
 
 
+@st.cache_data
+def load_sample_posts() -> list:
+    """讀 posts/index.json(16 篇範例 post 的 id + 標題)供下拉選單。"""
+    f = HERE / "posts" / "index.json"
+    if not f.exists():
+        return []
+    return json.loads(f.read_text(encoding="utf-8")).get("posts", [])
+
+
 def load_sample():
-    st.session_state.post_input = core.load_post_text(17)
+    """選一篇範例 post → 把全文填入 Post 框(仍走即時 build,不預存 persona)。"""
+    i = st.session_state.get("sample_pick", 0)
+    posts = load_sample_posts()
+    if not i or i > len(posts):
+        return
+    txt = HERE / "posts" / f"{posts[i - 1]['id']}.txt"
+    if txt.exists():
+        st.session_state.post_input = txt.read_text(encoding="utf-8").strip()
 
 
 def reset_prompts():
@@ -259,13 +276,18 @@ def render_build():
                         help="A: build a CCD first, then the persona. B: build directly from the post.")
         st.text_area("Post", key="post_input", height=150,
                       placeholder="Paste any post / self-description here…")
+        _samples = load_sample_posts()
+        if _samples:
+            st.selectbox(
+                "或選一篇範例 post", range(len(_samples) + 1),
+                format_func=lambda i: "— 選一篇範例 post 填入上方 —" if i == 0
+                    else f"{_samples[i - 1]['title'][:70]}",
+                key="sample_pick", on_change=load_sample,
+                help="選一篇會把全文填入 Post 框;可再編輯,按 Build 即時產 CCD→persona。",
+            )
         build_style, build_model = style_temp_controls("build")
         st.caption(f"🧠 Replies use **{build_model}**")
-        b1, b2, _ = st.columns([1, 1, 3])
-        with b1:
-            st.button("📄 Sample", on_click=load_sample, use_container_width=True)
-        with b2:
-            build = st.button("✨ Build", type="primary", use_container_width=True)
+        build = st.button("✨ Build", type="primary", use_container_width=True)
     with cR:
         with st.expander("Method pipeline (A / B) — what each step calls", expanded=False):
             st.markdown(PIPELINE_HTML, unsafe_allow_html=True)
@@ -277,7 +299,7 @@ def render_build():
     if build:
         post_text = st.session_state.get("post_input", "")
         if not post_text.strip():
-            st.warning("Paste a post first, or click \"Sample\".")
+            st.warning("Paste a post first, or pick a sample above.")
         else:
             kk = VIEW_KEY[view]
             mode = KEY_MODE[kk]
