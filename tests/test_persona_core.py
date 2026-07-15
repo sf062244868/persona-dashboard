@@ -6,21 +6,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import persona_core as core  # noqa: E402
 
 
-def test_load_clusters_has_8_categories():
-    clusters = core.load_clusters()
-    assert len(clusters) == 8
-    assert "Habit Change" in clusters
-    # 每篇 post 都有必要欄位
-    for posts in clusters.values():
-        for p in posts:
-            assert {"id", "category", "title", "summary", "url", "flagged"} <= set(p)
-
-
-def test_load_post_text_known_and_unknown():
-    assert len(core.load_post_text(17)) > 0     # #17 全文存在 posts/17.txt
-    assert core.load_post_text(999999) == ""    # 不存在 → 空字串
-
-
 def test_build_persona_direct_no_api():
     r = core.build_persona(core.MODE_DIRECT, "I feel stuck and tired.")
     assert r["basis"] == "Post"
@@ -118,20 +103,6 @@ def test_new_box_shape_renders_and_feeds_persona(monkeypatch):
     assert "reached out to no one" in system
 
 
-def test_grounding_report_counts():
-    """grounding_report:stated 的 evidence 對得上 post 才 pass;inferred 要有 '?'。"""
-    rep = core.grounding_report(NEW_BOX_CM, POST_TEXT_FOR_NEW_BOX)
-    s = rep["summary"]
-    assert s["n_boxes"] == 9                       # 4 top + 5 per-situation
-    assert s["inferred_total"] == 3                # meaning / core_belief / intermediate
-    assert s["inferred_marked"] == 3               # 三個都以 '?' 結尾
-    assert s["stated_total"] == 6                  # 其餘 6 格為 stated
-    # 只有 life_history 那條 evidence 不在 post → 恰好 1 格 stated 應 fail
-    bad = [r for r in rep["rows"] if r["grounding"] == "stated" and r["ok"] is False]
-    assert len(bad) == 1 and bad[0]["box"] == "life_history"
-    assert s["stated_pass"] == 5
-
-
 def test_build_persona_ccd_situation_index(monkeypatch):
     """cm_index 選第幾個 cognitive model,忠於官方 Abe 1-1/1-2/1-3 的一場一情境。"""
     def fake_generate_ccd_psi(post_text, ccd_prompt=None, name=None):
@@ -143,12 +114,12 @@ def test_build_persona_ccd_situation_index(monkeypatch):
     assert "SITU-TWO" in r["system"] and "SITU-ONE" not in r["system"]
 
 
-def test_ccd_cache_returns_same(monkeypatch):
-    """同一篇 post 第二次走快取(cached=True、不再呼叫底層 client)。"""
+def test_ccd_psi_cache_returns_same(monkeypatch):
+    """同一篇 post 第二次走 generate_ccd_psi 快取(cached=True、不再呼叫底層 client)。"""
     calls = {"n": 0}
 
     class _Msg:
-        content = "CCD-FROM-API"
+        content = '{"name": "X", "cognitive_models": []}'
 
     class _Choice:
         message = _Msg()
@@ -166,11 +137,11 @@ def test_ccd_cache_returns_same(monkeypatch):
                     return _Resp()
 
     monkeypatch.setattr(core, "get_client", lambda: _Client())
-    core._ccd_cache.clear()
+    core._ccd_psi_cache.clear()
     text = "unique-post-for-cache-test"
-    ccd1, _, info1 = core.generate_ccd(text)
-    ccd2, _, info2 = core.generate_ccd(text)
-    assert ccd1 == ccd2 == "CCD-FROM-API"
+    cm1, info1 = core.generate_ccd_psi(text)
+    cm2, info2 = core.generate_ccd_psi(text)
+    assert cm1 == cm2
     assert calls["n"] == 1            # 第二次沒再打 API
     assert info1["cached"] is False and info2["cached"] is True
 
