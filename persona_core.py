@@ -246,57 +246,34 @@ def _bullet(items):
 #   - 兩段式:Stage 1 只做「post → 自由文字 CCD」,封閉集 label 交給獨立的 Stage 2 外掛。
 #   - 每格是可稽核 box:{"text","grounding":"stated"|"inferred","evidence":[原文精確子字串]}。
 #     stated 的 evidence 必為 post 的逐字子字串 → 讓「CCD vs origin post」能字串比對(見 grounding_report)。
-#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name 直接用外部傳入的 NAME(lean-v2)。
+#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name 直接用外部傳入的 NAME(psi-v3)。
+#   - psi-v3:改寫為以「moment/box」口語敘事的程序式指令,拿掉 themes 欄位(下游未使用)與 inferred 的 " ?" 後綴。
 #   - 佔位符只剩 {name}{patient_text}(舊的 {helpless}{unlovable}{worthless}{emotions} 已移除)。
 #   ⚠ prompt 內含字面 JSON 大括號,務必用 _ccd_psi_prompt 的 .replace 套版,不可用 str.format。
-BUILD_CCD_PROMPT_PSI = """Complete a Beck (Traditional) Cognitive Conceptualization Diagram (CCD) for the person who
-wrote the TEXT below (CBT Worksheet Packet, J. Beck, 2020). A CCD is a set of working
-hypotheses, not a diagnosis: do not attribute depression or any disorder unless the TEXT
-states it.
+BUILD_CCD_PROMPT_PSI = """Read the first-person TEXT below and produce working hypotheses about the difficulty it presents, stated in the person's own terms.
 
-GROUNDING
-- Work only from the TEXT.
-- Every box is either "stated" (restates the TEXT; "evidence" = exact substrings from the
-  TEXT, checked by string match) or "inferred" (your hypothesis; append " ?" to the text and
-  put the quotes that motivated it in "evidence").
-- If a box cannot be grounded, use {"text": "insufficient information", "grounding": null,
-  "evidence": []}. An empty box is correct; a filled ungrounded box is an error.
-- The person's self-evaluations (e.g., "I'm a burden") belong in the belief boxes, never in
-  life_history.
-
-ORDER OF WORK (bottom-up)
-Situations -> automatic thoughts -> their meaning -> only then hypothesize the core belief
-and complete the top boxes. Generate the JSON keys in exactly the order given below.
-
-SITUATIONS
-One situation box per distinct theme grounded in the TEXT; a single-theme post yields one box.
+PROCEDURE
+1. Find the moments in the TEXT where the person records what went through their mind — an external event, a thought, or a memory tied to a particular point in time; not an ongoing state. Take up to three; if there are more, take the ones whose thoughts differ most from each other. One box per moment. For each, record the words or images in their mind, what that thought said about them as a person, the feeling word(s) they used or the emotion their words and actions in that moment show, and what they did then — including doing nothing, avoiding, or dwelling on it.
+2. State what each of those thoughts means about the person. Where these meanings converge across moments, they support one belief about the self; where they do not converge, the TEXT supports more than one.
+3. State the belief the meanings converge on, as an unconditional "I am ..." sentence in the person's own framing. If they converge on more than one, state the one most of them share; leave the other meanings as they are.
+4. State the "if ... then ..." assumptions or "should" rules the person lives by to manage that belief, and the recurring behavior patterns that carry those rules out.
+5. Record the biographical facts that explain where the belief comes from, and the recent event(s) that set off the current difficulty. Recent events alone are enough.
 
 OUTPUT
-A single JSON object, no markdown fences. Each CCD box is:
-  {"text": str, "grounding": "stated" | "inferred", "evidence": [exact quotes from TEXT]}
-
-Keys, in generation order:
-- "name": the NAME provided below, verbatim.
-- "themes": array of short strings — the distinct problematic theme(s) the TEXT grounds.
-- "cognitive_models": array, one object per theme:
-    - "situation": "What was the problematic situation?" — one specific moment, not an
-      ongoing state.
-    - "automatic_thoughts": "What went through the person's mind?" — the surface words in
-      that moment, NOT the core belief; if the TEXT records none, use "insufficient
-      information".
-    - "meaning_of_automatic_thought": "What did the automatic thought mean to them?" — the
-      bridge toward a belief about the self; usually "inferred".
-    - "emotion": "What emotion was associated with the automatic thought?" — the person's
-      own feeling word(s), free text.
-    - "behavior": "What did the person do then?"
-- "core_belief": "What is the person's most central dysfunctional belief about themself?" —
-  in their own framing, derived from the meanings above; almost always "inferred".
-- "intermediate_beliefs": "Which assumptions, rules and attitudes help them cope with the
-  core belief?" — current episode; include a low-period shift only if the TEXT describes one.
-- "coping_strategies": "Which patterns of behavior do they use to cope with the belief(s)?"
-- "life_history": "Which experiences contributed to the development and maintenance of the
-  core belief(s)?" plus the precipitant(s) of the current difficulty — biographical facts
-  only; precipitants alone are acceptable.
+Return only one JSON object — no markdown fences, no text before or after it. Every field is:
+  {"text": str, "grounding": "stated" | "inferred", "evidence": [str]}
+- "stated": the text restates the TEXT; evidence = substrings copied from the TEXT character for character, including any typos and punctuation as written (they will be string-matched).
+- "inferred": the text is your hypothesis; evidence = the substrings that motivated it.
+- If the TEXT does not support a field:
+  {"text": "insufficient information", "grounding": null, "evidence": []}
+Keep each "text" to one or two sentences and each "evidence" to at most two short quotes.
+Generate keys in this order — it follows the procedure:
+- "name": the NAME below, verbatim (a plain string, not a box).
+- "cognitive_models": one object per moment (step 1), keys "situation", "automatic_thoughts", "meaning_of_automatic_thought" (step 2), "emotion", then "behavior".
+- "core_belief": step 3.
+- "intermediate_beliefs": step 4 rules.
+- "coping_strategies": step 4 patterns.
+- "life_history": step 5.
 
 NAME: {name}
 TEXT:
@@ -358,7 +335,7 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
         if name:
             cm["name"] = name
         # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
-        cm.setdefault("prompt_version", "beck-aligned-lean-v2")
+        cm.setdefault("prompt_version", "beck-aligned-psi-v3")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
 
