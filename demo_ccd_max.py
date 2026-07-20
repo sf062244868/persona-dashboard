@@ -26,7 +26,7 @@ import persona_core as pc
 
 HERE = Path(__file__).resolve().parent
 POST_ID = "1htp0xw"          # r/selfimprovement: How to get by with no friends and support system?
-DISPLAY_NAME = "Max"
+DISPLAY_NAME = POST_ID          # persona 不取名,顯示一律用 post_id
 
 # posts_16.json 內的截斷摘要(content_complete=False)。僅作 fallback。
 MAX_POST_STUB = (
@@ -59,10 +59,10 @@ def main():
     print(post)
 
     hr("[2] 修過的 CCD 建構 PROMPT(實際送給 gpt-4o 的全文)")
-    print(pc._ccd_psi_prompt(post, name=DISPLAY_NAME))
+    print(pc._ccd_psi_prompt(post))
 
     hr("[3] 生成的 CCD")
-    cm, info = pc.generate_ccd_psi(post, name=DISPLAY_NAME)
+    cm, info = pc.generate_ccd_psi(post)
     print("— 結構化 JSON —")
     print(json.dumps(cm, ensure_ascii=False, indent=2))
     print("\n— 給人看的 9-格(對齊 Beck worksheet 欄位順序)—")
@@ -73,7 +73,7 @@ def main():
     #     留著只會印出誤導的 ✗。
     hr("[3b] 對齊檢查(對照問題清單)")
     checks = {
-        "name grounded == 'Max'": cm.get("name") == DISPLAY_NAME,
+        "CCD 不含人名(識別用 post_id)": "name" not in cm,
         "no fabricated depression field": "intermediate_beliefs_during_depression" not in cm,
         "has Meaning of A.T. field": all(
             "meaning_of_automatic_thought" in m for m in pc._cognitive_models(cm)),
@@ -90,7 +90,7 @@ def main():
           "plain-string fields (no evidence boxes).")
 
     hr("[4] CHAT(persona 回話;確認貼原 post、講話自然)")
-    build = pc.build_persona(pc.MODE_CCD, post, name=DISPLAY_NAME)
+    build = pc.build_persona(pc.MODE_CCD, post)
     system = build["system"]
     questions = [
         "Hi, thanks for coming in today. To start, can you tell me about a specific moment "
