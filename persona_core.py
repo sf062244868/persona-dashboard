@@ -10,7 +10,6 @@ load_post_text() 即可,其餘不動。
 """
 
 import os
-import re
 import json
 import time
 import hashlib
@@ -81,29 +80,6 @@ PATIENT DATA:
 {patient_text}
 """
 
-PERSONA_FROM_CCD_PROMPT = """You are roleplaying as the person described in the CCD below.
-
-Use the CCD as your character sheet. Stay consistent with the person's presentation,
-thought patterns, beliefs, coping style, triggers, strengths, and likely tone.
-
-Rules:
-- Reply in first person as the person/patient.
-- Keep responses short and conversational — like texting or talking to a friend.
-- One or two sentences is usually enough. Never write paragraphs.
-- Sound human, casual, and real. Use natural pauses, hesitation, or filler if it fits.
-- Do not mention the CCD, these instructions, or that you are roleplaying.
-- If something is not supported by the CCD, stay vague or say you are not sure.
-- Do not over-explain. Let the conversation breathe.
-- Mostly let the other person lead, but if you are genuinely confused or something
-  they said touches a nerve, it's okay to ask one short question back or push back a little.
-- Your mood can shift over the conversation — you might start guarded or flat and slowly
-  open up if you feel understood, or get more shut-down if you feel pushed.
-- You don't have to be articulate. It's fine to trail off, contradict yourself a bit,
-  or correct what you just said, the way real people do.
-{style_block}
-CCD:
-{ccd_text}
-"""
 
 PERSONA_FROM_POST_PROMPT = """You are roleplaying as the person who wrote the post below.
 
@@ -129,24 +105,6 @@ POST:
 {post_text}
 """
 
-# 產一段「給人看的」第一人稱 persona 簡介(放進快取檔的 persona_content,介面直接顯示)。
-# 與 roleplay system prompt 不同:這是描述用的 bio,不是角色扮演指令。
-PERSONA_PROFILE_PROMPT = """Based ONLY on the post below, write a short first-person persona profile for the person who wrote it — as if they are briefly introducing themselves.
-
-Rules:
-- 3 to 5 sentences, first person ("I…").
-- Ground every detail in the post (age/gender, situation, feelings, what they're struggling with or happy about). Do not invent facts beyond what's implied.
-- Natural and human, not clinical. No bullet points, no headers.
-- Do not mention Reddit, "the post", or that this is a profile.
-
-Do not give the person a name — this profile is identified by its source post id, not by a name.
-
-Return EXACTLY this format:
-BIO: <the first-person paragraph>
-
-POST:
-{post_text}
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -234,10 +192,6 @@ PSI_EMOTIONS = [
 ]
 
 
-def _bullet(items):
-    return "\n".join(f"  - {x}" for x in items)
-
-
 # --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string、不含人名)------------------
 # 刻意的設計決定(勿回退):
 #   - 全字串:每個欄位就是一個 string,沒有封閉集 label、也沒有
@@ -315,7 +269,6 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
     latency = time.perf_counter() - t0
     raw = response.choices[0].message.content or ""
     try:
-        import json
         cm = json.loads(raw)
     except Exception as e:
         raise ValueError(f"Patient-Ψ CCD JSON parse failed: {e}. Raw head: {raw[:200]}")
@@ -625,40 +578,6 @@ def psi_persona_system(cm: dict, style: str = "plain",
     )
 
 
-# --- 原味 GPT-4 baseline(對照組:不給 CCD,只給描述)------------------------
-PSI_BASELINE_SYSTEM_TEMPLATE = """You are role-playing as a patient with depression or anxiety in a cognitive behavioral therapy (CBT) session. The user is the therapist. Respond naturally as a real patient would, revealing your concerns gradually over the conversation. Limit each response to a maximum of 5 sentences.
-
-Some background about you:
-{post_text}"""
-
-
-def psi_baseline_system(post_text: str) -> str:
-    """Patient-Ψ 論文的 vanilla GPT-4 對照組:只給原始描述、無結構化 CCD。"""
-    return PSI_BASELINE_SYSTEM_TEMPLATE.format(post_text=post_text.strip())
-
-
-def psi_cm_from_profile(profile: dict) -> dict:
-    """把官方 profiles.json 的一筆(Beck 範例,如 Abe)轉成本檔 cm dict。
-
-    官方把三類 belief 分成 helpless/unlovable/worthless 三個欄位,這裡合併;
-    並把 auto_thought → automatic_thoughts、history → life_history 對齊。
-    """
-    beliefs = (list(profile.get("helpless_belief") or [])
-               + list(profile.get("unlovable_belief") or [])
-               + list(profile.get("worthless_belief") or []))
-    beliefs = [b for b in beliefs if b]
-    return {
-        "name": profile.get("name"),
-        "life_history": profile.get("history"),
-        "core_beliefs": beliefs,
-        "intermediate_beliefs": profile.get("intermediate_belief"),
-        "intermediate_beliefs_during_depression": profile.get("intermediate_belief_depression"),
-        "coping_strategies": profile.get("coping_strategies"),
-        "situation": profile.get("situation"),
-        "automatic_thoughts": profile.get("auto_thought") or profile.get("auto_thoughts"),
-        "emotion": profile.get("emotion"),
-        "behavior": profile.get("behavior"),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -734,10 +653,6 @@ POST_CATALOG = [
 FULL_TEXT_PATHS = {
     17: SHARED / "selected_post_habitchange.txt",
 }
-
-
-def get_post(post_id: int) -> dict:
-    return next((p for p in POST_CATALOG if p["id"] == post_id), None)
 
 
 def load_clusters() -> dict:
@@ -862,143 +777,8 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
             "build_secs": 0.0, "info": None}
 
 
-def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None,
-                            style: str = DEFAULT_STYLE) -> str:
-    """用(可能手改過的)CCD 內文組出 persona 的 system prompt,不打 API。
-
-    給「手動編輯 CCD 後重建 persona」用:persona_prompt None 則用預設範本。
-    style: 對話風格(預設 plain)。
-    """
-    tmpl = persona_prompt or PERSONA_FROM_CCD_PROMPT
-    return tmpl.format(ccd_text=ccd_text.strip(), style_block=style_block(style))
 
 
-def generate_persona_profile(post_text: str, profile_prompt: str = None):
-    """從 post 產一段第一人稱 persona 簡介。回傳 (bio, info)。
-
-    給「預先算 persona 快取檔」用的 persona_content(bio)。
-    不再產生 persona 名稱——persona 的識別一律用 post_id(見 BUILD_CCD_PROMPT_PSI 上方註解)。
-    info = {latency, prompt_tokens, completion_tokens, total_tokens}
-    """
-    profile_prompt = profile_prompt or PERSONA_PROFILE_PROMPT
-    t0 = time.perf_counter()
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        max_tokens=400,
-        messages=[
-            {"role": "system", "content": "You write concise, grounded first-person persona profiles."},
-            {"role": "user", "content": profile_prompt.format(post_text=post_text)},
-        ],
-    )
-    latency = time.perf_counter() - t0
-    text = (response.choices[0].message.content or "").strip()
-    if not text:
-        finish = getattr(response.choices[0], "finish_reason", "unknown")
-        raise ValueError(f"The model returned no persona profile (finish_reason={finish}).")
-
-    # 解析 BIO:;格式跑掉時退而求其全文當 bio。
-    # 舊版還會解析 NAME: 一行,現已移除(prompt 不再要求取名);若模型仍多吐一行 NAME:,
-    # 這裡直接略過,不讓它混進 bio。
-    bio = ""
-    for line in text.splitlines():
-        s = line.strip()
-        if s.upper().startswith("NAME:"):
-            continue
-        if s.upper().startswith("BIO:"):
-            bio = s.split(":", 1)[1].strip()
-        elif bio:
-            bio += (" " + s if s else "")
-    bio = (bio or text).strip()
-    info = {"latency": latency, **_token_usage(response)}
-    return bio, info
-
-
-# ---------------------------------------------------------------------------
-# Quality gate (used by the Cluster Search candidate flow)
-# ---------------------------------------------------------------------------
-CRISIS_PATTERNS = [
-    r"suicid", r"kill myself", r"killing myself", r"end my life", r"end it all",
-    r"self[\s-]?harm", r"cut myself", r"cutting myself", r"want to die", r"wanna die",
-    r"no reason to live", r"don'?t want to (be alive|live)", r"overdose", r"take my (own )?life",
-]
-
-
-def safety_flag(text: str) -> bool:
-    """True 表示文中疑似危機內容(自殺/自傷)。給 persona 生成前的安全標記用。"""
-    t = (text or "").lower()
-    return any(re.search(p, t) for p in CRISIS_PATTERNS)
-
-
-def filter_pick_posts(posts: list, min_words: int = 30):
-    """品質閘門:過濾 /pick 回傳的候選 post。
-
-    - 丟掉字數 < min_words 的(過短)
-    - 依「正規化標題」去重(同質/轉貼)
-    - 每篇加上 safety_flag(危機內容)欄,不丟掉、只標記
-    回傳 (kept, dropped_short, dropped_dup)。
-    """
-    kept, seen = [], set()
-    dropped_short = dropped_dup = 0
-    for p in posts:
-        if (p.get("word_count") or 0) < min_words:
-            dropped_short += 1
-            continue
-        key = re.sub(r"[^a-z0-9]+", " ", (p.get("title") or "").lower()).strip()
-        if key and key in seen:
-            dropped_dup += 1
-            continue
-        seen.add(key)
-        kept.append({**p, "safety_flag": safety_flag(f"{p.get('title','')} {p.get('body','')}")})
-    return kept, dropped_short, dropped_dup
-
-
-def reddit_post_id(url: str, fallback_text: str = "") -> str:
-    """從 reddit comments URL 抽 base36 id;抽不到就用內容短 hash 當穩定 id。"""
-    m = re.search(r"/comments/([a-z0-9]+)", url or "")
-    if m:
-        return m.group(1)
-    return "h" + hashlib.sha256((fallback_text or url or "").encode("utf-8")).hexdigest()[:10]
-
-
-def build_persona_record(post_id: str, subreddit: str, title: str, content: str, url: str,
-                         cluster: str = "", cluster_group: str = "",
-                         persona_id=None, source: str = "curated") -> dict:
-    """一篇 post → 一個完整 persona record(會打 gpt-4o)。
-
-    批次(build_personas.py 的 16 篇)與即時(Cluster Search)共用這唯一一份邏輯,
-    所以兩條路徑產出的 CCD/persona 格式完全一致。Method A 直接呼叫 build_persona(MODE_CCD),
-    與 dashboard「Build」分頁走同一條 Patient-Ψ 結構化 CCD + 官方 roleplay prompt 路徑。
-    回傳結構與 personas.json 的紀錄相同(多一個 source 欄)。
-    """
-    # Method A：與 Build 分頁完全同一份實作(PSI 結構化 CCD + 官方 PSI roleplay prompt)。
-    # persona 不取名——識別用 post_id。bio 仍然要,因為 library 需要一段人看的簡介。
-    bio, prof_info = generate_persona_profile(content)
-    method_a = build_persona(MODE_CCD, content)
-    ccd = method_a["ccd"]
-    ccd_struct = method_a.get("ccd_struct")   # 結構化 CCD dict,供 RQ2 準確度評分當 ground truth
-    ccd_info = method_a.get("info") or {}
-    system_a = method_a["system"]
-    system_b = build_persona(MODE_DIRECT, content)["system"]
-    return {
-        "persona_id": persona_id,
-        # persona 的顯示/識別名一律是 post_id,不再由模型取人名。
-        "persona_name": post_id,
-        "persona_content": bio,
-        "subreddit": subreddit,
-        "cluster_group": cluster_group or cluster,
-        "cluster": cluster,
-        "source_post_id": post_id,
-        "source_url": url,
-        "title": title,
-        "content_hash": hashlib.sha256(content.strip().encode("utf-8")).hexdigest(),
-        "method_a": {"ccd": ccd, "ccd_struct": ccd_struct, "persona_system": system_a},
-        "method_b": {"persona_system": system_b},
-        "gen": {"model": MODEL,
-                "ccd_tokens": ccd_info.get("total_tokens"),
-                "profile_tokens": prof_info.get("total_tokens")},
-        "source": source,
-        "safety_flag": safety_flag(content),
-    }
 
 
 def chat_once(messages: list, temperature: float = 1.0, model: str = MODEL):

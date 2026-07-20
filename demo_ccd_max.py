@@ -26,7 +26,6 @@ import persona_core as pc
 
 HERE = Path(__file__).resolve().parent
 POST_ID = "1htp0xw"          # r/selfimprovement: How to get by with no friends and support system?
-DISPLAY_NAME = POST_ID          # persona 不取名,顯示一律用 post_id
 
 # posts_16.json 內的截斷摘要(content_complete=False)。僅作 fallback。
 MAX_POST_STUB = (
