@@ -241,39 +241,32 @@ def _bullet(items):
     return "\n".join(f"  - {x}" for x in items)
 
 
-# --- Stage-1 CCD 生成(對齊 Beck 2020 Worksheet Packet;free-text、無封閉集)---------
-# 逐條出處對照見 docs/BUILD_CCD_PROMPT_beck_aligned.md。與舊版關鍵差異:
-#   - 兩段式:Stage 1 只做「post → 自由文字 CCD」,封閉集 label 交給獨立的 Stage 2 外掛。
-#   - 每格是可稽核 box:{"text","grounding":"stated"|"inferred","evidence":[原文精確子字串]}。
-#     stated 的 evidence 必為 post 的逐字子字串 → 讓「CCD vs origin post」能字串比對(見 grounding_report)。
-#   - 去病理化、去憂鬱假設;bottom-up 產生順序;含 Meaning of A.T. 格;name 直接用外部傳入的 NAME(psi-v3)。
-#   - psi-v3:改寫為以「moment/box」口語敘事的程序式指令,拿掉 themes 欄位(下游未使用)與 inferred 的 " ?" 後綴。
-#   - 佔位符只剩 {name}{patient_text}(舊的 {helpless}{unlovable}{worthless}{emotions} 已移除)。
-#   ⚠ prompt 內含字面 JSON 大括號,務必用 _ccd_psi_prompt 的 .replace 套版,不可用 str.format。
-BUILD_CCD_PROMPT_PSI = """Read the first-person TEXT below and produce working hypotheses about the difficulty it presents, stated in the person's own terms.
+# --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string)-----------------------
+# 刻意的設計決定(勿回退):
+#   - 全字串:每個欄位就是一個 string,沒有封閉集 label、也沒有
+#     {"text","grounding","evidence"} box(psi-v3 的 box 格式到此為止)。
+#   - 因此不再注入 {helpless}{unlovable}{worthless}{emotions},佔位符只剩 {name}{patient_text}。
+#   - 連帶影響:grounding_report 對本版輸出不適用(無 evidence box)→ demo 顯示 N/A。
+#     grounding_report 與 box 形存取器全部保留,舊的 box 形快取 CCD 仍可稽核/顯示。
+#   - bottom-up 產生順序(situations → beliefs);不支援的欄位填 "insufficient information"。
+BUILD_CCD_PROMPT_PSI = """From the TEXT below, identify the writer's automatic thoughts, emotions, behaviors, and the beliefs behind them, using only what the TEXT states. Treat every entry as a working hypothesis; mark uncertain ones with "?".
 
-PROCEDURE
-1. Find the moments in the TEXT where the person records what went through their mind — an external event, a thought, or a memory tied to a particular point in time; not an ongoing state. Take up to three; if there are more, take the ones whose thoughts differ most from each other. One box per moment. For each, record the words or images in their mind, what that thought said about them as a person, the feeling word(s) they used or the emotion their words and actions in that moment show, and what they did then — including doing nothing, avoiding, or dwelling on it.
-2. State what each of those thoughts means about the person. Where these meanings converge across moments, they support one belief about the self; where they do not converge, the TEXT supports more than one.
-3. State the belief the meanings converge on, as an unconditional "I am ..." sentence in the person's own framing. If they converge on more than one, state the one most of them share; leave the other meanings as they are.
-4. State the "if ... then ..." assumptions or "should" rules the person lives by to manage that belief, and the recurring behavior patterns that carry those rules out.
-5. Record the biographical facts that explain where the belief comes from, and the recent event(s) that set off the current difficulty. Recent events alone are enough.
+Start from the situations, then work up to the beliefs.
 
-OUTPUT
-Return only one JSON object — no markdown fences, no text before or after it. Every field is:
-  {"text": str, "grounding": "stated" | "inferred", "evidence": [str]}
-- "stated": the text restates the TEXT; evidence = substrings copied from the TEXT character for character, including any typos and punctuation as written (they will be string-matched).
-- "inferred": the text is your hypothesis; evidence = the substrings that motivated it.
-- If the TEXT does not support a field:
-  {"text": "insufficient information", "grounding": null, "evidence": []}
-Keep each "text" to one or two sentences and each "evidence" to at most two short quotes.
-Generate keys in this order — it follows the procedure:
-- "name": the NAME below, verbatim (a plain string, not a box).
-- "cognitive_models": one object per moment (step 1), keys "situation", "automatic_thoughts", "meaning_of_automatic_thought" (step 2), "emotion", then "behavior".
-- "core_belief": step 3.
-- "intermediate_beliefs": step 4 rules.
-- "coping_strategies": step 4 patterns.
-- "life_history": step 5.
+For each of 1–3 problematic situations in the TEXT:
+- situation: What was the problematic situation?
+- automatic_thoughts: What went through their mind?
+- meaning_of_automatic_thought: What did that automatic thought mean to them?
+- emotion: What emotion was associated with the automatic thought?
+- behavior: What did they do then?
+
+Across those situations:
+- life_history: Which experiences contributed to the development and maintenance of the core belief?
+- core_belief: What is their most central dysfunctional belief about themself?
+- intermediate_beliefs: Which assumptions, rules and beliefs help them cope with the core belief?
+- coping_strategies: Which patterns of dysfunctional behaviors do they use to cope with the belief?
+
+Return a JSON object with these keys in order: "name" (the NAME below, verbatim), "life_history", "core_belief", "intermediate_beliefs", "coping_strategies", "cognitive_models" (array of 1–3 objects with keys in order: situation, automatic_thoughts, meaning_of_automatic_thought, emotion, behavior). Each value is a string. If the TEXT does not support a field, use "insufficient information".
 
 NAME: {name}
 TEXT:
@@ -282,14 +275,11 @@ TEXT:
 
 
 def _ccd_psi_prompt(patient_text: str, template: str = None, name: str = "") -> str:
-    # 用 .replace 而非 .format:新版 prompt 內含字面 JSON 大括號({"text":...}),str.format 會炸。
-    # 仍保留舊封閉集佔位符的替換,讓自訂/舊 prompt(若含 {helpless} 等)也能正確套版。
+    # 只替換 {name} 與 {patient_text}——純 Beck 全字串版不再注入封閉集
+    # ({helpless}{unlovable}{worthless}{emotions} 的注入已移除,見上方設計註解)。
+    # 用 .replace 而非 .format:自訂 prompt 若含字面 JSON 大括號,str.format 會炸。
     tmpl = template or BUILD_CCD_PROMPT_PSI
     return (tmpl
-            .replace("{helpless}", _bullet(PSI_CORE_BELIEFS["helpless"]))
-            .replace("{unlovable}", _bullet(PSI_CORE_BELIEFS["unlovable"]))
-            .replace("{worthless}", _bullet(PSI_CORE_BELIEFS["worthless"]))
-            .replace("{emotions}", _bullet(PSI_EMOTIONS))
             .replace("{name}", name or "")
             .replace("{patient_text}", patient_text))
 
@@ -300,9 +290,9 @@ _ccd_psi_cache = {}
 def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
     """post → Beck 結構化 CCD(dict)。回傳 (cm_dict, info)。
 
-    cm_dict 含上述 JSON keys;core_belief.label / emotion.label 落在封閉集內,供自動 F1。
-    ccd_prompt: 自訂 CCD 建構 prompt(需保留 {helpless}{unlovable}{worthless}{emotions}{name}{patient_text}
-    佔位符);None 則用預設 BUILD_CCD_PROMPT_PSI。
+    cm_dict 含上述 JSON keys,每個欄位都是 plain string(無封閉集 label、無 grounding box)。
+    ccd_prompt: 自訂 CCD 建構 prompt(只需保留 {name}{patient_text} 佔位符);
+    None 則用預設 BUILD_CCD_PROMPT_PSI。
     name: 要 grounding 的顯示名(填入 CCD 的 "name",修掉「顯示名≠CCD 內部名」的 bug);None 交給模型自行取名。
     同一篇 post + 同一份 prompt + 同一個 name 走記憶體快取。
     """
@@ -335,7 +325,9 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
         if name:
             cm["name"] = name
         # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
-        cm.setdefault("prompt_version", "beck-aligned-psi-v3")
+        # v4 = 純 Beck 全字串版;與 psi-v3(box 形 {"text","grounding","evidence"})輸出格式不同,
+        # 存檔後必須能分辨,否則跨版本比較會把兩種格式混在一起。
+        cm.setdefault("prompt_version", "beck-pure-string-v4")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
 
@@ -475,6 +467,11 @@ def _core_belief_display(cm: dict) -> str:
     cb = cm.get("core_belief")
     if _is_box(cb):
         return _box_display(cb)
+    # 純字串版(beck-pure-string-v4):值本身就是全部內容,沒有封閉集 label 可附註。
+    # 若不擋掉,_dual_line 會拿同一個字串同時當 text 與 label,印出
+    # 「I am alone  [closed-set: I am alone]」這種假 label。
+    if isinstance(cb, str):
+        return cb.strip() or "(none)"
     return _dual_line(_core_belief_text(cm), _core_belief_labels(cm))
 
 
@@ -482,6 +479,9 @@ def _emotion_display(m: dict) -> str:
     emo = m.get("emotion")
     if _is_box(emo):
         return _box_display(emo)
+    # 同上:純字串情緒不附封閉集 label。
+    if isinstance(emo, str):
+        return emo.strip() or "(none)"
     return _dual_line(_emotion_text(m), _emotion_labels(m))
 
 

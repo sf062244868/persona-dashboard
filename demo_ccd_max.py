@@ -11,7 +11,7 @@ demo_ccd_max.py — advisor demo: Max (Loneliness) 的 post → 新版 Beck CCD 
   [1] 原 post(拿來和 CCD 對照)
   [2] 修過的 CCD 建構 prompt 全文(BUILD_CCD_PROMPT_PSI)
   [3] 生成的結構化 CCD(Stage-1 box JSON + 給人看的 9-格文字)
-  [3b] 對齊檢查 + [3c] grounding 稽核(每格 evidence 是否為原 post 的精確子字串,零 API)
+  [3b] 對齊檢查 + [3c] grounding 稽核(本版為純字串輸出,無 evidence box → 顯示 N/A)
   [4] 幾題訪談對話,確認 persona 講話自然、貼原 post(用本人原話,不照唸封閉集)
 
 ⚠️ Max 全文請貼到 posts/1htp0xw.txt(posts_16.json 只存了截斷的摘要)。沒有該檔時
@@ -69,31 +69,25 @@ def main():
     print(pc.cm_to_text(cm))
 
     # 幾個對照檢查點(對應 CCD_prompt_problem_summary 的問題)
+    # 註:box 形(text+grounding)的斷言已移除——純字串版本刻意不產 evidence box,
+    #     留著只會印出誤導的 ✗。
     hr("[3b] 對齊檢查(對照問題清單)")
-    cb = cm.get("core_belief")
     checks = {
         "name grounded == 'Max'": cm.get("name") == DISPLAY_NAME,
         "no fabricated depression field": "intermediate_beliefs_during_depression" not in cm,
-        "has Meaning of A.T. box": all(
+        "has Meaning of A.T. field": all(
             "meaning_of_automatic_thought" in m for m in pc._cognitive_models(cm)),
-        "core_belief is a grounded box (text+grounding)": isinstance(cb, dict)
-            and bool(cb.get("text")) and ("grounding" in cb),
-        "prompt_version stamped": cm.get("prompt_version") == "beck-aligned-v1",
+        "core_belief present": bool(str(cm.get("core_belief") or "").strip()),
+        "prompt_version stamped": cm.get("prompt_version") == "beck-pure-string-v4",
     }
     for k, v in checks.items():
         print(f"  [{'✓' if v else '✗'}] {k}")
 
-    # grounding 稽核:CCD 的每個 box 是否貼原 post(零 API,回應 advisor 的 "compare with post")
-    hr("[3c] Grounding 稽核(CCD vs origin post,零 API)")
-    rep = pc.grounding_report(cm, post)
-    s = rep["summary"]
-    print(f"  boxes={s['n_boxes']}  ·  stated {s['stated_pass']}/{s['stated_total']} "
-          f"evidence 對得上 post  ·  inferred {s['inferred_marked']}/{s['inferred_total']} 有標 '?'  "
-          f"·  insufficient={s['insufficient']}")
-    for r in rep["rows"]:
-        mark = "—" if r["ok"] is None else ("✓" if r["ok"] else "✗")
-        extra = f"  bad_evidence={r['bad_evidence']}" if r.get("bad_evidence") else ""
-        print(f"    [{mark}] {r['box']}: {r['grounding']}{extra}")
+    # grounding 稽核對本版不適用:純字串輸出沒有 evidence box,跑了只會印 0/0。
+    # grounding_report 本身保留(舊 box 形快取 CCD 仍可用)。
+    hr("[3c] Grounding 稽核(CCD vs origin post)")
+    print("  Grounding/evidence audit: N/A — this CCD prompt version emits "
+          "plain-string fields (no evidence boxes).")
 
     hr("[4] CHAT(persona 回話;確認貼原 post、講話自然)")
     build = pc.build_persona(pc.MODE_CCD, post, name=DISPLAY_NAME)
