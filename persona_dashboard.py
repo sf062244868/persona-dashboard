@@ -396,10 +396,10 @@ def render_build():
     with st.expander("🧩 Edit prompts"):
         st.caption("The real templates sent to the model. Edit, then **Build** to apply. Keep each `{curly}` placeholder.")
         st.button("↩️ Reset to default", on_click=reset_prompts)
-        st.text_area("① Build CCD (A) — 純 Beck Traditional CCD: `{name}`, `{patient_text}` "
-                     "(每個欄位輸出為 plain string;無封閉集 label、無 grounding/evidence box)",
+        st.text_area("① Build CCD (A) — 純 Beck Traditional CCD: `{patient_text}` "
+                     "(每個欄位輸出為 plain string;無人名、無封閉集 label、無 grounding/evidence box)",
                      key="build_ccd_prompt_edit", height=140)
-        st.text_area("② Roleplay from CCD (A) — `{name}` `{history}` `{core_belief}` "
+        st.text_area("② Roleplay from CCD (A) — `{history}` `{core_belief}` "
                      "`{intermediate_belief}` `{coping_strategies}` "
                      "`{situation}` `{auto_thoughts}` `{meaning}` `{emotion}` `{behavior}` `{style_content}`",
                      key="persona_from_ccd_prompt_edit", height=140)

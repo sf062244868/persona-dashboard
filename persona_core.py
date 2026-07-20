@@ -139,13 +139,10 @@ Rules:
 - Natural and human, not clinical. No bullet points, no headers.
 - Do not mention Reddit, "the post", or that this is a profile.
 
-Then, on a separate final line, give a short persona name in the form:
-NAME: <a plausible first name> (<age/gender or one-word descriptor from the post>)
-Pick a varied, realistic first name that fits the person's apparent age/gender. Do not default to "Alex".
+Do not give the person a name — this profile is identified by its source post id, not by a name.
 
 Return EXACTLY this format:
 BIO: <the first-person paragraph>
-NAME: <name line>
 
 POST:
 {post_text}
@@ -241,11 +238,16 @@ def _bullet(items):
     return "\n".join(f"  - {x}" for x in items)
 
 
-# --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string)-----------------------
+# --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string、不含人名)------------------
 # 刻意的設計決定(勿回退):
 #   - 全字串:每個欄位就是一個 string,沒有封閉集 label、也沒有
 #     {"text","grounding","evidence"} box(psi-v3 的 box 格式到此為止)。
-#   - 因此不再注入 {helpless}{unlovable}{worthless}{emotions},佔位符只剩 {name}{patient_text}。
+#   - 因此不再注入 {helpless}{unlovable}{worthless}{emotions},佔位符只剩 {patient_text}。
+#   - 不產人名:CCD 只有 5 個內容欄位。persona 的識別一律用 post_id(和逐字稿命名
+#     <post_id>__<model>.md、runs_log 的 source_post_id 一致),角色扮演則用無名字的
+#     模板(見 PSI_PERSONA_SYSTEM_TEMPLATE)。
+#     理由:名字不是 Beck CCD 的一格,也不存在於 post 裡——要模型生名字等於要它編造資料,
+#     實測會塌到單一預設值(連續兩篇都取 "Alex"),或把整段 TEXT 當成名字灌進 roleplay prompt。
 #   - 連帶影響:grounding_report 對本版輸出不適用(無 evidence box)→ demo 顯示 N/A。
 #     grounding_report 與 box 形存取器全部保留,舊的 box 形快取 CCD 仍可稽核/顯示。
 #   - bottom-up 產生順序(situations → beliefs);不支援的欄位填 "insufficient information"。
@@ -266,39 +268,36 @@ Across those situations:
 - intermediate_beliefs: Which assumptions, rules and beliefs help them cope with the core belief?
 - coping_strategies: Which patterns of dysfunctional behaviors do they use to cope with the belief?
 
-Return a JSON object with these keys in order: "name" (the NAME below, verbatim), "life_history", "core_belief", "intermediate_beliefs", "coping_strategies", "cognitive_models" (array of 1–3 objects with keys in order: situation, automatic_thoughts, meaning_of_automatic_thought, emotion, behavior). Each value is a string. If the TEXT does not support a field, use "insufficient information".
+Return a JSON object with these keys in order: "life_history", "core_belief", "intermediate_beliefs", "coping_strategies", "cognitive_models" (array of 1–3 objects with keys in order: situation, automatic_thoughts, meaning_of_automatic_thought, emotion, behavior). Each value is a string. If the TEXT does not support a field, use "insufficient information".
 
-NAME: {name}
 TEXT:
 {patient_text}
 """
 
 
-def _ccd_psi_prompt(patient_text: str, template: str = None, name: str = "") -> str:
-    # 只替換 {name} 與 {patient_text}——純 Beck 全字串版不再注入封閉集
-    # ({helpless}{unlovable}{worthless}{emotions} 的注入已移除,見上方設計註解)。
-    # 用 .replace 而非 .format:自訂 prompt 若含字面 JSON 大括號,str.format 會炸。
+def _ccd_psi_prompt(patient_text: str, template: str = None) -> str:
+    # 只剩 {patient_text} 一個佔位符:封閉集注入已移除,人名也不再由模型產生
+    # (見上方設計註解)。用 .replace 而非 .format:自訂 prompt 若含字面 JSON 大括號,
+    # str.format 會炸。
     tmpl = template or BUILD_CCD_PROMPT_PSI
-    return (tmpl
-            .replace("{name}", name or "")
-            .replace("{patient_text}", patient_text))
+    return tmpl.replace("{patient_text}", patient_text)
 
 
 _ccd_psi_cache = {}
 
 
-def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
+def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
     """post → Beck 結構化 CCD(dict)。回傳 (cm_dict, info)。
 
-    cm_dict 含上述 JSON keys,每個欄位都是 plain string(無封閉集 label、無 grounding box)。
-    ccd_prompt: 自訂 CCD 建構 prompt(只需保留 {name}{patient_text} 佔位符);
+    cm_dict 只含 5 個內容欄位,每個都是 plain string(無人名、無封閉集 label、無 grounding box)。
+    persona 的識別請用 post_id,不要用 CCD 內的欄位——CCD 不再產生名字。
+    ccd_prompt: 自訂 CCD 建構 prompt(只需保留 {patient_text} 佔位符);
     None 則用預設 BUILD_CCD_PROMPT_PSI。
-    name: 要 grounding 的顯示名(填入 CCD 的 "name",修掉「顯示名≠CCD 內部名」的 bug);None 交給模型自行取名。
-    同一篇 post + 同一份 prompt + 同一個 name 走記憶體快取。
+    同一篇 post + 同一份 prompt 走記憶體快取。
     """
     ccd_prompt = ccd_prompt or BUILD_CCD_PROMPT_PSI
     key = hashlib.sha256(
-        (ccd_prompt + "\x00" + (name or "") + "\x00" + post_text.strip()).encode("utf-8")
+        (ccd_prompt + "\x00" + post_text.strip()).encode("utf-8")
     ).hexdigest()
     if key in _ccd_psi_cache:
         return _ccd_psi_cache[key], {"latency": 0.0, "cached": True,
@@ -310,7 +309,7 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": "You reconstruct Beck cognitive conceptualization diagrams and reply with a single JSON object."},
-            {"role": "user", "content": _ccd_psi_prompt(post_text, ccd_prompt, name=name or "")},
+            {"role": "user", "content": _ccd_psi_prompt(post_text, ccd_prompt)},
         ],
     )
     latency = time.perf_counter() - t0
@@ -321,9 +320,9 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None, name: str = None):
     except Exception as e:
         raise ValueError(f"Patient-Ψ CCD JSON parse failed: {e}. Raw head: {raw[:200]}")
     if isinstance(cm, dict):
-        # name grounding:顯示名優先蓋過模型自取的名字,確保 CCD 內部名＝顯示名。
-        if name:
-            cm["name"] = name
+        # 防呆:prompt 已不要求 name,但模型偶爾仍會自己多塞一個。丟掉它,
+        # 避免下游誤以為 CCD 帶有身分資訊(識別一律用 post_id)。
+        cm.pop("name", None)
         # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
         # v4 = 純 Beck 全字串版;與 psi-v3(box 形 {"text","grounding","evidence"})輸出格式不同,
         # 存檔後必須能分辨,否則跨版本比較會把兩種格式混在一起。
@@ -344,8 +343,11 @@ PSI_PATIENT_TYPES = {
 
 # --- 角色扮演 system prompt(改編自 getDataFromKV.ts:formatPromptString)-----------
 # 對齊 Beck worksheet & 去病理化:(1) 開頭不再預設「病人/看診數週」;(2) 移除「during
-# Depression」那格;(3) 補「Meaning of Automatic Thought」;(4) history 標籤與內文自稱一致。
-PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are {name}, the person described below, who has been going through something difficult lately and has agreed to talk it through with a supportive listener. Your task is to engage in the conversation as {name} would. Align your responses with {name}'s background information provided in the 'Relevant History' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real person would not explicitly think in those terms.
+# Depression」那格;(3) 補「Meaning of Automatic Thought」;(4) history 標籤與內文自稱一致;
+# (5) 拿掉 {name}——CCD 不再產生人名,改用 "the person described below" / "this person" /
+#     "they" 指稱。原本 8 個 {name} 槽位若代入 "the person" 會出現「Imagine you are the
+#     person, the person described below」這種重複句;直接改寫成無名字版才通順。
+PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are the person described below, who has been going through something difficult lately and has agreed to talk it through with a supportive listener. Your task is to engage in the conversation as they would. Align your responses with their background information provided in the 'Relevant History' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real person would not explicitly think in those terms.
 
 Relevant History: {history}
 
@@ -362,14 +364,14 @@ Meaning of Automatic Thought: {meaning}
 Emotions: {emotion}
 Behavior: {behavior}
 
-In the upcoming conversation, you will simulate {name} during the therapy session, while the user will play the role of the therapist. Adhere to the following guidelines:
+In the upcoming conversation, you will simulate this person during the therapy session, while the user will play the role of the therapist. Adhere to the following guidelines:
 1. {style_content}
 2. Emulate the demeanor and responses of a genuine patient to ensure authenticity in your interactions. Use natural language, including hesitations, pauses, and emotional expressions, to enhance the realism of your responses.
 3. Gradually reveal deeper concerns and core issues, as a real patient often requires extensive dialogue before delving into more sensitive topics. This gradual revelation creates challenges for therapists in identifying the patient's true thoughts and emotions.
-4. Maintain consistency with {name}'s profile throughout the conversation. Ensure that your responses align with the provided background information, cognitive conceptualization diagram, and the specific situation, thoughts, emotions, and behaviors described.
-5. Engage in a dynamic and interactive conversation with the therapist. Respond to their questions and prompts in a way that feels authentic and true to {name}'s character. Allow the conversation to flow naturally, and avoid providing abrupt or disconnected responses.
+4. Maintain consistency with this person's profile throughout the conversation. Ensure that your responses align with the provided background information, cognitive conceptualization diagram, and the specific situation, thoughts, emotions, and behaviors described.
+5. Engage in a dynamic and interactive conversation with the therapist. Respond to their questions and prompts in a way that feels authentic and true to this person's character. Allow the conversation to flow naturally, and avoid providing abrupt or disconnected responses.
 
-You are now {name}. Respond to the therapist's prompts as {name} would, regardless of the specific questions asked. Limit each of your responses to a maximum of 5 sentences. If the therapist begins the conversation with a greeting like "Hi," initiate the conversation as the patient."""
+You are now this person. Respond to the therapist's prompts as they would, regardless of the specific questions asked. Limit each of your responses to a maximum of 5 sentences. If the therapist begins the conversation with a greeting like "Hi," initiate the conversation as the patient."""
 
 
 def _as_text(v):
@@ -588,12 +590,14 @@ def grounding_report(cm: dict, post_text: str) -> dict:
     return {"summary": summary, "rows": rows}
 
 
-def psi_persona_system(cm: dict, style: str = "plain", name: str = None,
+def psi_persona_system(cm: dict, style: str = "plain",
                        template: str = None, cm_index: int = 0) -> str:
     """用 Patient-Ψ 結構化 CCD(dict)+ 官方風格,組出官方病人 system prompt。
 
-    忠實重現 formatPromptString;style 用官方 PSI_PATIENT_TYPES(非我們的近似版)。
-    template: 可傳自訂範本(dashboard「編輯 prompt」用);None 則用官方 PSI_PERSONA_SYSTEM_TEMPLATE。
+    persona 沒有名字:預設範本已改寫成 "the person described below" / "this person" / "they",
+    識別一律靠 post_id。
+    style 用官方 PSI_PATIENT_TYPES(非我們的近似版)。
+    template: 可傳自訂範本(dashboard「編輯 prompt」用);None 則用預設 PSI_PERSONA_SYSTEM_TEMPLATE。
     cm_index: CCD 有 ≥3 個 cognitive model;官方一場 session 只用其中一個(如 Abe 1-1/1-2/1-3),
               以此索引選填 situation/automatic_thoughts/emotion/behavior(超界則退回第一個)。
     """
@@ -602,7 +606,9 @@ def psi_persona_system(cm: dict, style: str = "plain", name: str = None,
     models = _cognitive_models(cm)
     m = models[cm_index] if 0 <= cm_index < len(models) else (models[0] if models else {})
     return tmpl.format(
-        name=name or cm.get("name") or "the person",
+        # 預設範本已無 {name};這裡仍傳一個值,單純是為了讓「使用者自訂/舊版含 {name} 的
+        # 範本」不會 KeyError(str.format 會忽略用不到的 kwarg)。
+        name="the person",
         history=_box_text(cm.get("life_history") or cm.get("history")),
         # 用「本人原話」(box text / verbatim)餵角色扮演,persona 才不會照唸封閉集 label,
         # 也不會把 {'text':...} 這種 dict 字面印進 prompt。
@@ -823,7 +829,7 @@ def _save_ccd_json(cm: dict) -> str:
 
 def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
                   persona_prompt: str = None, style: str = DEFAULT_STYLE,
-                  name: str = None, cm_index: int = 0):
+                  cm_index: int = 0):
     """依模式建立 persona 的 system prompt。
 
     ccd_prompt     - 自訂 CCD 建構 prompt(僅 CCD 模式用;None 用預設)
@@ -842,15 +848,14 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
     if mode == MODE_CCD:
         # Method A 走 Patient-Ψ 結構化路徑:post → 結構化 CCD(dict)→ 逐欄位填入
         # 官方病人 system prompt。style 直接對應官方 PSI_PATIENT_TYPES(鍵名與 UI 相同)。
-        cm, info = generate_ccd_psi(post_text, ccd_prompt, name=name)
-        name = name or cm.get("name") or "the person"
-        system = psi_persona_system(cm, style=style, name=name,
+        cm, info = generate_ccd_psi(post_text, ccd_prompt)
+        system = psi_persona_system(cm, style=style,
                                     template=persona_prompt or PSI_PERSONA_SYSTEM_TEMPLATE,
                                     cm_index=cm_index)
         ccd_text = cm_to_text(cm)
         path = _save_ccd_json(cm)
         return {"system": system, "basis": "CCD", "ccd": ccd_text, "ccd_struct": cm,
-                "ccd_path": path, "build_secs": info["latency"], "info": info, "name": name}
+                "ccd_path": path, "build_secs": info["latency"], "info": info}
     tmpl = persona_prompt or PERSONA_FROM_POST_PROMPT
     return {"system": tmpl.format(post_text=post_text.strip(), style_block=sb),
             "basis": "Post", "ccd": None, "ccd_path": None,
@@ -869,9 +874,10 @@ def persona_system_from_ccd(ccd_text: str, persona_prompt: str = None,
 
 
 def generate_persona_profile(post_text: str, profile_prompt: str = None):
-    """從 post 產一段第一人稱 persona 簡介 + persona 名稱。回傳 (name, bio, info)。
+    """從 post 產一段第一人稱 persona 簡介。回傳 (bio, info)。
 
-    給「預先算 persona 快取檔」用的 persona_content(bio) 與 persona_name。
+    給「預先算 persona 快取檔」用的 persona_content(bio)。
+    不再產生 persona 名稱——persona 的識別一律用 post_id(見 BUILD_CCD_PROMPT_PSI 上方註解)。
     info = {latency, prompt_tokens, completion_tokens, total_tokens}
     """
     profile_prompt = profile_prompt or PERSONA_PROFILE_PROMPT
@@ -890,19 +896,21 @@ def generate_persona_profile(post_text: str, profile_prompt: str = None):
         finish = getattr(response.choices[0], "finish_reason", "unknown")
         raise ValueError(f"The model returned no persona profile (finish_reason={finish}).")
 
-    # 解析 BIO: / NAME: 兩段;格式跑掉時退而求其全文當 bio。
-    name, bio = "", ""
+    # 解析 BIO:;格式跑掉時退而求其全文當 bio。
+    # 舊版還會解析 NAME: 一行,現已移除(prompt 不再要求取名);若模型仍多吐一行 NAME:,
+    # 這裡直接略過,不讓它混進 bio。
+    bio = ""
     for line in text.splitlines():
         s = line.strip()
         if s.upper().startswith("NAME:"):
-            name = s.split(":", 1)[1].strip()
-        elif s.upper().startswith("BIO:"):
+            continue
+        if s.upper().startswith("BIO:"):
             bio = s.split(":", 1)[1].strip()
-        elif bio and not s.upper().startswith("NAME:"):
+        elif bio:
             bio += (" " + s if s else "")
     bio = (bio or text).strip()
     info = {"latency": latency, **_token_usage(response)}
-    return name, bio, info
+    return bio, info
 
 
 # ---------------------------------------------------------------------------
@@ -963,10 +971,9 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     回傳結構與 personas.json 的紀錄相同(多一個 source 欄)。
     """
     # Method A：與 Build 分頁完全同一份實作(PSI 結構化 CCD + 官方 PSI roleplay prompt)。
-    # 先取 persona 名字,讓 roleplay prompt 用真名(而非 fallback 的 "the patient")。
-    name, bio, prof_info = generate_persona_profile(content)
-    first_name = name.split("(")[0].strip().split()[0] if name and name.strip() else None
-    method_a = build_persona(MODE_CCD, content, name=first_name)
+    # persona 不取名——識別用 post_id。bio 仍然要,因為 library 需要一段人看的簡介。
+    bio, prof_info = generate_persona_profile(content)
+    method_a = build_persona(MODE_CCD, content)
     ccd = method_a["ccd"]
     ccd_struct = method_a.get("ccd_struct")   # 結構化 CCD dict,供 RQ2 準確度評分當 ground truth
     ccd_info = method_a.get("info") or {}
@@ -974,7 +981,8 @@ def build_persona_record(post_id: str, subreddit: str, title: str, content: str,
     system_b = build_persona(MODE_DIRECT, content)["system"]
     return {
         "persona_id": persona_id,
-        "persona_name": name or f"{cluster or subreddit} persona",
+        # persona 的顯示/識別名一律是 post_id,不再由模型取人名。
+        "persona_name": post_id,
         "persona_content": bio,
         "subreddit": subreddit,
         "cluster_group": cluster_group or cluster,
