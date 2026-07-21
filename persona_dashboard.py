@@ -27,8 +27,8 @@ import persona_core as core   # noqa: E402
 HERE = Path(__file__).resolve().parent
 
 # Two build methods (single-column result; A·B side-by-side removed).
-VIEW_A = "Method A (Post-CCD)"
-VIEW_B = "Method B (Direct)"
+VIEW_A = "Method A (CCD)"
+VIEW_B = "Method B (post)"
 VIEW_KEY = {VIEW_A: "A", VIEW_B: "B"}
 KEY_MODE = {"A": core.MODE_CCD, "B": core.MODE_DIRECT}
 KEY_LABEL = {"A": "Method A · via CCD", "B": "Method B · direct post"}
@@ -398,12 +398,13 @@ def render_build():
         st.button("↩️ Reset to default", on_click=reset_prompts)
         st.text_area("① Build CCD (A) — 純 Beck Traditional CCD: `{patient_text}` "
                      "(每個欄位輸出為 plain string;無人名、無封閉集 label、無 grounding/evidence box)",
-                     key="build_ccd_prompt_edit", height=140)
+                     key="build_ccd_prompt_edit", height=420)
         st.text_area("② Roleplay from CCD (A) — `{history}` `{core_belief}` "
                      "`{intermediate_belief}` `{coping_strategies}` "
                      "`{situation}` `{auto_thoughts}` `{meaning}` `{emotion}` `{behavior}` `{style_content}`",
-                     key="persona_from_ccd_prompt_edit", height=140)
-        st.text_area("③ Roleplay from post (B) — `{post_text}`, `{style_block}`", key="persona_from_post_prompt_edit", height=140)
+                     key="persona_from_ccd_prompt_edit", height=560)
+        st.text_area("③ Roleplay from post (B) — `{post_text}`, `{style_block}`",
+                     key="persona_from_post_prompt_edit", height=420)
 
 
 # ===========================================================================
