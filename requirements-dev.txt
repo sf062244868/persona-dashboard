@@ -1,3 +1,0 @@
-# 開發/測試用(部署不需要)
--r requirements.txt
-pytest>=8.0

@@ -61,10 +61,6 @@ demo_ccd_max.py         Single-post walkthrough script
 
 posts/                  16 sample posts, listed in index.json
 patients_ccd/           CCDs written at runtime (gitignored)
-clusters/               Extension point for post clustering
-
-experiments/            End-to-end pipeline test and its recorded output
-tests/                  pytest suite
 docs/                   pipeline.md, DEPLOY.md
 ```
 
@@ -72,22 +68,6 @@ Keep the entry points at the repository root. `persona_dashboard.py` imports
 `persona_core` as a bare module, `persona_core` resolves `posts/` relative to its own
 directory, and Streamlit Cloud pins the main file path to the root. Moving these files
 breaks imports and the deployment together.
-
-## Testing
-
-```bash
-pip install -r requirements-dev.txt
-pytest tests/
-```
-
-The 9 unit tests need no API key.
-
-End-to-end pipeline test, which writes one report per post to `experiments/results/`:
-
-```bash
-python experiments/test_3posts.py --dry-run   # no API calls
-python experiments/test_3posts.py             # real run, roughly US$0.5
-```
 
 ## More
 

@@ -9,3 +9,11 @@ __pycache__/
 
 # 系統
 .DS_Store
+
+# 本機開發用,不上 GitHub(檔案仍留在本機,pytest / dry-run 照常可跑)
+tests/
+experiments/
+clusters/
+.devcontainer/
+requirements-dev.txt
+posts/17.txt
