@@ -1,14 +1,16 @@
-# posts/ — 接口 placeholder
+# posts/
 
-`persona_core.py` 的 `load_post_text(post_id)` 會先找這裡的 `{id}.txt`。
-把某篇 post 的全文存成對應檔名，介面選到該 post 時就會自動帶入全文。
+Sample posts for the app's post picker.
 
-範例：
+Each post is one `<post_id>.txt` file holding the full text, where `post_id` is the Reddit
+submission ID. `index.json` lists the 16 posts the picker offers:
+
+```json
+{
+  "posts": [
+    {"id": "1hc3zyb", "title": "...", "subreddit": "r/relationship_advice"}
+  ]
+}
 ```
-posts/17.txt   ← #17 Habit Change（上次的 ★ 來源 post）
-posts/12.txt   ← #12 Addiction
-```
 
-- 檔名用 `Merged_Post_List.md` 的 post 編號（1–20）。
-- 找不到檔案時，介面會留空讓使用者自己貼上。
-- #17 的全文上次已存在上層 `selected_post_habitchange.txt`，程式已自動映射，不必重複放。
+To add a post, write `<post_id>.txt` and add a matching entry to `index.json`.

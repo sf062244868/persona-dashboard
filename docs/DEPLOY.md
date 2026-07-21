@@ -1,90 +1,48 @@
-# 上線部署指南(Streamlit Community Cloud)
+# Deployment
 
-把 `persona_dashboard.py` 推上線,之後用網址就能開,不必開本地終端機。
-推薦用 **Streamlit Community Cloud**(免費、最適合 Streamlit)。
+The app runs on Streamlit Community Cloud from the `sf062244868/persona-dashboard`
+repository, with `persona_dashboard.py` as the main file.
 
----
-
-## 0. 上線前一定要做(安全)
-
-1. **把外洩的 OpenAI key 換掉**:目前 `.env` 那把曾以明文出現,請到
-   <https://platform.openai.com/api-keys> 撤銷舊的、產生新的。
-2. **設用量上限**:OpenAI 後台 Billing → Usage limits 設一個月上限,避免被打爆。
-3. **密鑰絕不進 git**:本資料夾 `.gitignore` 已排除 `.env` 與 `.streamlit/secrets.toml`。
-4. 程式已加 **密碼門檻**(`APP_PASSWORD`),上線後網頁需輸入密碼才能用。
-
----
-
-## 1. 準備檔案(已幫你建好)
-
-```
-2026.06.24/
-├── persona_dashboard.py        ← 主程式(部署入口)
-├── persona_core.py             ← 後端
-├── requirements.txt            ← 相依套件
-├── .gitignore                  ← 排除密鑰
-├── posts/17.txt                ← #17 全文(讓雲端也讀得到)
-└── .streamlit/
-    └── secrets.toml.example    ← secrets 範本(真的那份不上傳)
-```
-
----
-
-## 2. 推到 GitHub(需要 GitHub 帳號)
-
-> 把 repo 根目錄設成這個 `2026.06.24` 資料夾最單純(主程式、requirements 都在根)。
+## Update a running deployment
 
 ```bash
-cd "/home/ray/ray/filex and i/Build_Persona_Pipeline_AND_Chat_unzipped/2026.06.24"
-
-# 第一次用 gh 要先登入(會開瀏覽器授權)
-gh auth login
-
-git init
-git add .
-git commit -m "Persona generation dashboard"
-
-# 建一個 private repo 並推上去(名字可自訂)
-gh repo create persona-dashboard --private --source=. --push
+git push origin main
 ```
 
-確認 GitHub 上 **看不到** `.env` / `secrets.toml`(被 .gitignore 擋掉了)。
+Streamlit Cloud rebuilds automatically. Deployments read `main`, so anything unpushed is
+not live.
 
----
+Streamlit caches loaded data with `@st.cache_data`. A push does not clear that cache. If
+the app still serves old data after a successful rebuild, open the app dashboard and choose
+**Manage → Reboot app**.
 
-## 3. 在 Streamlit Cloud 部署
+## Deploy a new instance
 
-1. 開 <https://share.streamlit.io> → 用 GitHub 登入。
-2. **Create app** → 選剛剛的 repo、branch `main`、Main file path 填 `persona_dashboard.py`。
-3. 點 **Advanced settings → Secrets**,貼上(用你自己的值):
+1. Sign in to [share.streamlit.io](https://share.streamlit.io) with GitHub.
+2. Choose **Create app**, select the repository, branch `main`, and set the main file path
+   to `persona_dashboard.py`.
+3. Under **Advanced settings → Secrets**, add:
+
    ```toml
-   OPENAI_API_KEY = "sk-proj-你的新金鑰"
-   APP_PASSWORD = "你設的密碼"
+   OPENAI_API_KEY = "sk-proj-..."
+   APP_PASSWORD   = "..."
    ```
-4. **Deploy**。等 1–3 分鐘,會得到一個網址,如
-   `https://你的帳號-persona-dashboard.streamlit.app`。
 
----
+4. Choose **Deploy**. The first build takes one to three minutes.
 
-## 4. 限制誰能看(建議)
+`.streamlit/secrets.toml.example` is the template. The real `secrets.toml` is gitignored and
+must never be committed.
 
-App 設定 → **Settings → Sharing** → 把 "Who can view" 改成只允許特定 email,
-或就靠步驟 3 的 `APP_PASSWORD` 把關。
+## Access control
 
----
+`APP_PASSWORD` gates the app whenever it is set. To restrict access further, use
+**Settings → Sharing** and limit "Who can view" to specific email addresses.
 
-## 更新流程
+Set a monthly spending cap under OpenAI **Billing → Usage limits**. The app calls `gpt-4o`
+on every build and every chat turn, and a public URL is a public spend.
 
-之後改完程式,只要:
-```bash
-git add . && git commit -m "update" && git push
-```
-Streamlit Cloud 會自動重新部署。
+## Alternative host
 
----
-
-## 替代方案
-
-- **Hugging Face Spaces**(也免費、可設 private、用 Secrets 放金鑰):新建 Space 選
-  Streamlit SDK,把同樣這些檔案 push 上去,Secrets 設 `OPENAI_API_KEY` / `APP_PASSWORD`。
-- 兩者程式碼完全一樣,差別只在部署平台與 secrets 介面。
+Hugging Face Spaces works with the same code: create a Space with the Streamlit SDK, push
+the repository, and set `OPENAI_API_KEY` and `APP_PASSWORD` under the Space's Secrets. Only
+the deployment platform and the secrets UI differ.
