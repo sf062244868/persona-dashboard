@@ -48,39 +48,6 @@ MODE_DIRECT = "Direct Post-Chatbox"
 # Prompts
 # ---------------------------------------------------------------------------
 
-BUILD_CCD_PROMPT = """You are a clinical psychologist trained in Cognitive Behavioral Therapy, using the Beck Institute's traditional Cognitive Conceptualization Diagram (CCD) (Beck, 2020).
-
-Based ONLY on the text below from one person, build a full Cognitive Conceptualization Diagram. Do not invent facts — only infer from what is written. Flag anything speculative.
-
-Structure your response exactly as:
-
-1. RELEVANT LIFE HISTORY & PRECIPITANTS
-   - Formative life history relevant to the current difficulties, and the precipitant(s) of the current episode.
-
-2. CORE BELIEF(S)
-   - The central belief(s) about the self, others, and the world that are active in the current episode.
-
-3. INTERMEDIATE BELIEFS — ASSUMPTIONS / ATTITUDES / RULES
-   - The conditional assumptions, attitudes, and rules that connect the core beliefs to coping.
-
-4. COPING STRATEGIES
-   - The behavioral and cognitive strategies used to manage the core beliefs.
-
-5. CROSS-SECTIONAL SITUATIONS
-   Give up to 3 typical situations drawn from the text. For EACH situation, list:
-   - Situation: the activating event.
-   - Automatic Thought(s): the thought(s) that arose in that situation.
-   - Meaning of the Automatic Thought: what the thought meant about the person (link it to the core belief).
-   - Emotion: the resulting emotion(s).
-   - Behavior: the resulting behavior(s).
-
----
-
-PATIENT DATA:
-{patient_text}
-"""
-
-
 PERSONA_FROM_POST_PROMPT = """You are roleplaying as the person who wrote the post below.
 
 Use the post as your character sheet. Stay consistent with how this person presents:
@@ -679,10 +646,6 @@ def load_post_text(post_id: int) -> str:
 # LLM
 # ---------------------------------------------------------------------------
 
-# 以 post 內容 hash 為 key 的 CCD 記憶體快取:同一篇 post 重建不重打 API。
-_ccd_cache: dict = {}
-
-
 def _token_usage(response):
     u = getattr(response, "usage", None)
     return {
@@ -690,47 +653,6 @@ def _token_usage(response):
         "completion_tokens": getattr(u, "completion_tokens", None),
         "total_tokens": getattr(u, "total_tokens", None),
     }
-
-
-def generate_ccd(post_text: str, ccd_prompt: str = None):
-    """回傳 (ccd_text, saved_path, info)。同一篇 post + 同一份 prompt 走快取。
-
-    ccd_prompt: 自訂的 CCD 建構 prompt(含 {patient_text});None 則用預設 BUILD_CCD_PROMPT。
-    快取 key 同時看 prompt,所以「只改 prompt」也會重新生成(解掉舊版無法重抽的問題)。
-
-    info = {latency, cached, prompt_tokens, completion_tokens, total_tokens}
-    """
-    ccd_prompt = ccd_prompt or BUILD_CCD_PROMPT
-    key = hashlib.sha256((ccd_prompt + "\x00" + post_text).strip().encode("utf-8")).hexdigest()
-    if key in _ccd_cache:
-        ccd, path = _ccd_cache[key]
-        return ccd, path, {"latency": 0.0, "cached": True,
-                           "prompt_tokens": None, "completion_tokens": None, "total_tokens": None}
-
-    t0 = time.perf_counter()
-    response = get_client().chat.completions.create(
-        model=MODEL,
-        max_tokens=2000,
-        messages=[
-            {"role": "system", "content": "You are a clinical psychologist trained in CBT, using the Beck Institute Cognitive Conceptualization Diagram (Beck, 2020)."},
-            {"role": "user", "content": ccd_prompt.format(patient_text=post_text)},
-        ],
-    )
-    latency = time.perf_counter() - t0
-    ccd = response.choices[0].message.content
-    if not ccd or not ccd.strip():
-        # e.g. content filter / refusal / empty completion — fail with a clear message
-        # instead of a cryptic TypeError when we try to write None to disk.
-        finish = getattr(response.choices[0], "finish_reason", "unknown")
-        raise ValueError(f"The model returned no CCD text (finish_reason={finish}). "
-                         "Try a different post or adjust the CCD prompt.")
-    CCD_DIR.mkdir(exist_ok=True)
-    existing = [f for f in os.listdir(CCD_DIR) if f.startswith("single_") and f.endswith("_ccd.txt")]
-    out_path = CCD_DIR / f"single_{len(existing) + 1:03d}_ccd.txt"
-    out_path.write_text(ccd, encoding="utf-8")
-    _ccd_cache[key] = (ccd, str(out_path))
-    info = {"latency": latency, "cached": False, **_token_usage(response)}
-    return ccd, str(out_path), info
 
 
 def _save_ccd_json(cm: dict) -> str:

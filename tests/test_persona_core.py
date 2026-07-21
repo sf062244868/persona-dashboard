@@ -148,7 +148,7 @@ def test_ccd_cache_returns_same(monkeypatch):
     calls = {"n": 0}
 
     class _Msg:
-        content = "CCD-FROM-API"
+        content = '{"core_belief": "CCD-FROM-API"}'
 
     class _Choice:
         message = _Msg()
@@ -166,11 +166,11 @@ def test_ccd_cache_returns_same(monkeypatch):
                     return _Resp()
 
     monkeypatch.setattr(core, "get_client", lambda: _Client())
-    core._ccd_cache.clear()
+    core._ccd_psi_cache.clear()
     text = "unique-post-for-cache-test"
-    ccd1, _, info1 = core.generate_ccd(text)
-    ccd2, _, info2 = core.generate_ccd(text)
-    assert ccd1 == ccd2 == "CCD-FROM-API"
+    cm1, info1 = core.generate_ccd_psi(text)
+    cm2, info2 = core.generate_ccd_psi(text)
+    assert cm1 is cm2 and cm1["core_belief"] == "CCD-FROM-API"
     assert calls["n"] == 1            # 第二次沒再打 API
     assert info1["cached"] is False and info2["cached"] is True
 
