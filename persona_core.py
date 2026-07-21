@@ -70,7 +70,6 @@ POST:
 """
 
 
-
 # ---------------------------------------------------------------------------
 # 對話風格(Patient-Ψ / arXiv 2405.19660 的 six conversational styles)
 # ---------------------------------------------------------------------------
@@ -118,22 +117,18 @@ def style_block(style: str = DEFAULT_STYLE) -> str:
 #   - 六風格 prompt(app/api/data/patient-types.jsx)
 #   - 病人角色扮演 system prompt(app/api/getDataFromKV.ts:formatPromptString)
 # 與上面「我們自寫的近似版(CONVERSATION_STYLES / PERSONA_FROM_*)」並存,互不影響:
-# 這一段是「忠實重現」用,做基礎線與自動評測;上面那段是 Week4 人性化探索用。
-# 官方素材存證見 meetings/2026-07-07-week4/patient_psi_ref/。
+# 這一段是「忠實重現」用;上面那段是自寫的人性化版本。
 # ===========================================================================
 
 # --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string、不含人名)------------------
 # 刻意的設計決定(勿回退):
 #   - 全字串:每個欄位就是一個 string,沒有封閉集 label、也沒有
-#     {"text","grounding","evidence"} box(psi-v3 的 box 格式到此為止)。
-#   - 因此不再注入 {helpless}{unlovable}{worthless}{emotions},佔位符只剩 {patient_text}。
-#   - 不產人名:CCD 只有 5 個內容欄位。persona 的識別一律用 post_id(和逐字稿命名
-#     <post_id>__<model>.md、runs_log 的 source_post_id 一致),角色扮演則用無名字的
-#     模板(見 PSI_PERSONA_SYSTEM_TEMPLATE)。
+#     {"text","grounding","evidence"} box。唯一的佔位符是 {patient_text}。
+#   - 不產人名:CCD 只有 5 個內容欄位,persona 的識別一律用 post_id,角色扮演用
+#     無名字的模板(見 PSI_PERSONA_SYSTEM_TEMPLATE)。
 #     理由:名字不是 Beck CCD 的一格,也不存在於 post 裡——要模型生名字等於要它編造資料,
 #     實測會塌到單一預設值(連續兩篇都取 "Alex"),或把整段 TEXT 當成名字灌進 roleplay prompt。
-#   - box 形存取器(_is_box / _box_display)保留,舊格式快取 CCD 仍能顯示;
-#     稽核用的 grounding_report 已移除——本版無 evidence box,它對任何輸出都回 0/0。
+#   - box 形存取器(_is_box / _box_display)保留,舊格式快取 CCD 仍能顯示。
 #   - bottom-up 產生順序(situations → beliefs);不支援的欄位填 "insufficient information"。
 BUILD_CCD_PROMPT_PSI = """From the TEXT below, identify the writer's automatic thoughts, emotions, behaviors, and the beliefs behind them, using only what the TEXT states. Treat every entry as a working hypothesis; mark uncertain ones with "?".
 
@@ -160,9 +155,7 @@ TEXT:
 
 
 def _ccd_psi_prompt(patient_text: str, template: str = None) -> str:
-    # 只剩 {patient_text} 一個佔位符:封閉集注入已移除,人名也不再由模型產生
-    # (見上方設計註解)。用 .replace 而非 .format:自訂 prompt 若含字面 JSON 大括號,
-    # str.format 會炸。
+    # 用 .replace 而非 .format:自訂 prompt 若含字面 JSON 大括號,str.format 會炸。
     tmpl = template or BUILD_CCD_PROMPT_PSI
     return tmpl.replace("{patient_text}", patient_text)
 
@@ -206,9 +199,8 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
         # 防呆:prompt 已不要求 name,但模型偶爾仍會自己多塞一個。丟掉它,
         # 避免下游誤以為 CCD 帶有身分資訊(識別一律用 post_id)。
         cm.pop("name", None)
-        # 每份 CCD 標記 prompt 版本,方便日後對照/評分口徑追蹤。
-        # v4 = 純 Beck 全字串版;與 psi-v3(box 形 {"text","grounding","evidence"})輸出格式不同,
-        # 存檔後必須能分辨,否則跨版本比較會把兩種格式混在一起。
+        # 標記 prompt 版本:存進 patients_ccd/ 的 CCD 會跨越 prompt 改版而留存,
+        # 沒有這個戳記就無法分辨一份快取是哪一版產生的。
         cm.setdefault("prompt_version", "beck-pure-string-v4")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
@@ -225,11 +217,9 @@ PSI_PATIENT_TYPES = {
 }
 
 # --- 角色扮演 system prompt(改編自 getDataFromKV.ts:formatPromptString)-----------
-# 對齊 Beck worksheet & 去病理化:(1) 開頭不再預設「病人/看診數週」;(2) 移除「during
-# Depression」那格;(3) 補「Meaning of Automatic Thought」;(4) history 標籤與內文自稱一致;
-# (5) 拿掉 {name}——CCD 不再產生人名,改用 "the person described below" / "this person" /
-#     "they" 指稱。原本 8 個 {name} 槽位若代入 "the person" 會出現「Imagine you are the
-#     person, the person described below」這種重複句;直接改寫成無名字版才通順。
+# 相對官方版的調整:對齊 Beck worksheet(補「Meaning of Automatic Thought」一格)、
+# 去病理化(開頭不預設「病人/看診數週」),並改寫成無名字版,用
+# "the person described below" / "this person" / "they" 指稱。
 PSI_PERSONA_SYSTEM_TEMPLATE = """Imagine you are the person described below, who has been going through something difficult lately and has agreed to talk it through with a supportive listener. Your task is to engage in the conversation as they would. Align your responses with their background information provided in the 'Relevant History' section. Your thought process should be guided by the cognitive conceptualization diagram in the 'Cognitive Conceptualization Diagram' section, but avoid directly referencing the diagram as a real person would not explicitly think in those terms.
 
 Relevant History: {history}
@@ -349,7 +339,7 @@ def cm_to_text(cm: dict) -> str:
 
     對齊 Beck 2020 worksheet 的欄位順序:Life History → Core Belief → Intermediate
     Beliefs → Coping Strategies → 每個情境 Situation → Automatic Thought → Meaning of
-    A.T. → Emotion → Behavior。Stage-1 box 附 [stated]/[inferred] 標記,dual-field 附封閉集 label。
+    A.T. → Emotion → Behavior。box 形的值會附上 [stated]/[inferred] 標記。
     """
     lines = [
         f"Relevant Life History & Precipitants: {_box_display(cm.get('life_history'))}",
@@ -369,8 +359,6 @@ def cm_to_text(cm: dict) -> str:
     return "\n".join(lines)
 
 
-
-
 def psi_persona_system(cm: dict, style: str = "plain",
                        template: str = None, cm_index: int = 0) -> str:
     """用 Patient-Ψ 結構化 CCD(dict)+ 官方風格,組出官方病人 system prompt。
@@ -387,8 +375,8 @@ def psi_persona_system(cm: dict, style: str = "plain",
     models = _cognitive_models(cm)
     m = models[cm_index] if 0 <= cm_index < len(models) else (models[0] if models else {})
     return tmpl.format(
-        # 預設範本已無 {name};這裡仍傳一個值,單純是為了讓「使用者自訂/舊版含 {name} 的
-        # 範本」不會 KeyError(str.format 會忽略用不到的 kwarg)。
+        # 預設範本已無 {name};仍傳一個值,是為了讓使用者自訂含 {name} 的範本不會 KeyError
+        # (str.format 會忽略用不到的 kwarg)。
         name="the person",
         history=_box_text(cm.get("life_history") or cm.get("history")),
         # 用「本人原話」(box text / verbatim)餵角色扮演,persona 才不會照唸封閉集 label,
@@ -463,10 +451,6 @@ def build_persona(mode: str, post_text: str, ccd_prompt: str = None,
             "build_secs": 0.0, "info": None}
 
 
-
-
-
-
 def chat_once(messages: list, temperature: float = 1.0, model: str = MODEL):
     """messages 已含 system prompt 與歷史,回傳 (reply, info)。
 
@@ -474,8 +458,7 @@ def chat_once(messages: list, temperature: float = 1.0, model: str = MODEL):
                   同一把 OPENAI_API_KEY 同時涵蓋兩者,切換只是換 model 字串。
     temperature - 取樣溫度(UI 滑桿即時控制)。
 
-    註:已移除先前為「更像人」自加的 presence/frequency penalty——那非 Patient-Ψ
-    論文設定,拿掉以貼近論文。
+    取樣參數刻意只用 temperature,不加 presence/frequency penalty,以貼近 Patient-Ψ 論文設定。
 
     info = {latency, model, prompt_tokens, completion_tokens, total_tokens}
     """
