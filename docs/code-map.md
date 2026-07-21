@@ -33,10 +33,10 @@ fourth is inlined in a function call and is not exposed anywhere.
 
 | # | What it does | Constant | `persona_core.py` | Editable in UI |
 | --- | --- | --- | --- | --- |
-| ① | post → CCD JSON | `BUILD_CCD_PROMPT_PSI` | **138–159** | yes |
-| ② | roleplay, mode A (from CCD) | `PSI_PERSONA_SYSTEM_TEMPLATE` | **233–257** | yes |
+| ① | post → CCD JSON | `BUILD_CCD_PROMPT_PSI` | **133–154** | yes |
+| ② | roleplay, mode A (from CCD) | `PSI_PERSONA_SYSTEM_TEMPLATE` | **223–247** | yes |
 | ③ | roleplay, mode B (from post) | `PERSONA_FROM_POST_PROMPT` | **48–70** | yes |
-| ④ | JSON-format instruction for ① | *(none — inline literal)* | **195** | **no** |
+| ④ | JSON-format instruction for ① | *(none — inline literal)* | **188** | **no** |
 
 ④ is the system message `"You reconstruct Beck cognitive conceptualization diagrams and
 reply with a single JSON object."`, hardcoded inside the `chat.completions.create` call in
@@ -47,8 +47,8 @@ Two more blocks are prompt *fragments* rather than whole prompts:
 
 | Constant | `persona_core.py` | Injected into | Used in |
 | --- | --- | --- | --- |
-| `PSI_PATIENT_TYPES` | 218 | `{style_content}` of ② | mode A only |
-| `CONVERSATION_STYLES` | 83 | `{style_block}` of ③ | mode B only |
+| `PSI_PATIENT_TYPES` | 210 | `{style_content}` of ② | mode A only |
+| `CONVERSATION_STYLES` | 82 | `{style_block}` of ③ | mode B only |
 
 ### Finding them in the running app
 
@@ -76,8 +76,8 @@ is ③'s sibling — the session key calls it `persona_from_ccd`, which is the c
 
 Other collisions worth knowing about:
 
-- **Two style dictionaries with identical keys.** `CONVERSATION_STYLES` (`:83`) and
-  `PSI_PATIENT_TYPES` (`:218`) both have `plain / upset / verbose / reserved / tangent /
+- **Two style dictionaries with identical keys.** `CONVERSATION_STYLES` (`:82`) and
+  `PSI_PATIENT_TYPES` (`:210`) both have `plain / upset / verbose / reserved / tangent /
   pleasing`. The dropdown is built from the first (`persona_dashboard.py:156`), but in mode
   A the text that reaches the model comes from the second. So the menu is *labelled* by one
   dict and *honoured* by the other, depending on mode.
@@ -88,8 +88,6 @@ Other collisions worth knowing about:
   read).
 - **"CCD" names three things**: `cm` (the dict, inside `persona_core`), `ccd_struct` (same
   dict, returned by `build_persona`), and `run["ccd"]` (the 9-cell text from `cm_to_text`).
-- **`style_temp_controls()`** (`persona_dashboard.py:161`) no longer controls temperature.
-  It returns `(style, model)`.
 
 ## Data flow
 
@@ -97,12 +95,12 @@ Mode A, post → reply:
 
 ```
 persona_dashboard.render_build()          dashboard:316   collects post + mode + style
-  └ core.build_persona(MODE_CCD, ...)     core:431
-      ├ generate_ccd_psi()                core:173        API call #1 — prompts ① + ④
-      │   └ _ccd_psi_prompt()             core:162        substitutes {patient_text}
-      ├ cm_to_text()                      core:347        dict → the 9 cells the UI shows
-      └ psi_persona_system()              core:374        fills ② from the CCD + PSI_PATIENT_TYPES
-  └ core.chat_once(...)                   core:470        API call #2, once per turn
+  └ core.build_persona(MODE_CCD, ...)     core:419
+      ├ generate_ccd_psi()                core:166        API call #1 — prompts ① + ④
+      │   └ _ccd_psi_prompt()             core:157        substitutes {patient_text}
+      ├ cm_to_text()                      core:337        dict → the 9 cells the UI shows
+      └ psi_persona_system()              core:362        fills ② from the CCD + PSI_PATIENT_TYPES
+  └ core.chat_once(...)                   core:454        API call #2, once per turn
 ```
 
 Mode B skips `generate_ccd_psi` and `psi_persona_system`; `build_persona` formats ③
@@ -131,7 +129,7 @@ Two conventions the prompt enforces: fields the post does not support are filled
 `insufficient information`, and uncertain inferences end with `?`.
 
 The format carries no closed-set labels, no `{"text", "grounding", "evidence"}` boxes, and
-no name field — personas are identified by `post_id`. `cm_to_text()` (`core:347`) flattens
+no name field — personas are identified by `post_id`. `cm_to_text()` (`core:337`) flattens
 the five fields into the nine cells shown under **CCD profile**.
 
 ## Backward compatibility

@@ -158,11 +158,11 @@ _STYLE_HELP = ("How this persona tends to communicate — mirrors the range of r
                "patients (Patient-Ψ). 'plain' is the neutral baseline.")
 
 
-def style_temp_controls(key_prefix: str):
+def style_model_controls(key_prefix: str):
     """一列共用控制:對話風格 + 聊天模型。回傳 (style, model)。
 
     風格在「建立/切換」時烘進 system prompt;模型即時作用於每次 chat_once。
-    溫度不再開放 UI 調整——固定用 chat_once 預設,對實驗控制更乾淨。
+    取樣參數不開放 UI 調整,對實驗控制較乾淨。
     """
     c1, c2 = st.columns([3, 2])
     with c1:
@@ -293,7 +293,7 @@ def render_build():
                 key="sample_pick", on_change=load_sample,
                 help="選一篇會把全文填入 Post 框;可再編輯,按 Build 即時產 CCD→persona。",
             )
-        build_style, build_model = style_temp_controls("build")
+        build_style, build_model = style_model_controls("build")
         st.caption(f"🧠 Replies use **{build_model}**")
         build = st.button("✨ Build", type="primary", use_container_width=True)
     with cR:
