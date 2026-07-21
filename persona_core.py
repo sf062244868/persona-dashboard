@@ -456,7 +456,8 @@ def chat_once(messages: list, temperature: float = 1.0, model: str = MODEL):
 
     model       - 聊天模型(gpt-4o = 忠實基準,Patient-Ψ 用 GPT-4/4o;gpt-4o-mini = 側比較)。
                   同一把 OPENAI_API_KEY 同時涵蓋兩者,切換只是換 model 字串。
-    temperature - 取樣溫度(UI 滑桿即時控制)。
+    temperature - 取樣溫度。Streamlit UI 目前不開放調整,一律用預設 1.0;
+                  命令列腳本可自行指定。
 
     取樣參數刻意只用 temperature,不加 presence/frequency penalty,以貼近 Patient-Ψ 論文設定。
 
