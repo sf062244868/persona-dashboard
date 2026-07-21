@@ -53,6 +53,6 @@ Available while chatting:
 
 ## More
 
-- [docs/code-map.md](docs/code-map.md) — where the prompts live, and why some names repeat
-- [docs/pipeline.md](docs/pipeline.md) — what each mode calls
+- [docs/code-map.md](docs/code-map.md) — where the prompts live, what each mode calls, and
+  why some names repeat
 - [docs/DEPLOY.md](docs/DEPLOY.md) — deployment

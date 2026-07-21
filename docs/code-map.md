@@ -13,7 +13,7 @@ ui_common.py            Key injection and password gate
 
 posts/                  16 sample posts, listed in index.json
 patients_ccd/           CCDs written at runtime (gitignored)
-docs/                   this file, pipeline.md, DEPLOY.md
+docs/                   this file, DEPLOY.md
 ```
 
 These three modules stay at the repository root. `persona_dashboard.py` imports
@@ -111,6 +111,28 @@ directly with `{post_text}` and `{style_block}`.
 Sample posts do **not** go through `persona_core`. `load_sample_posts()`
 (`persona_dashboard.py:185`) reads `posts/index.json` itself, and the picker reads
 `posts/<id>.txt`.
+
+## The CCD format
+
+Prompt ① is stamped `beck-pure-string-v4` and is called with `model=gpt-4o`,
+`response_format={"type": "json_object"}`, `max_tokens=1500`. It returns five fields, all
+plain strings:
+
+```
+life_history
+core_belief
+intermediate_beliefs
+coping_strategies
+cognitive_models        1–3 objects, each with situation, automatic_thoughts,
+                        meaning_of_automatic_thought, emotion, behavior
+```
+
+Two conventions the prompt enforces: fields the post does not support are filled with
+`insufficient information`, and uncertain inferences end with `?`.
+
+The format carries no closed-set labels, no `{"text", "grounding", "evidence"}` boxes, and
+no name field — personas are identified by `post_id`. `cm_to_text()` (`core:407`) flattens
+the five fields into the nine cells shown under **CCD profile**.
 
 ## Legacy code kept on purpose
 
