@@ -144,12 +144,35 @@ _defaults = {
     "built_view": None,
     "saved": [],
     "build_counter": 0,
+}
+for k, v in _defaults.items():
+    st.session_state.setdefault(k, v)
+
+# --- 編輯過的 prompt:widget 值 + 一份持久副本 -------------------------------
+# 為什麼要兩份:三個 text_area 建立在腳本尾端(第 400 行之後),但 build 與 chat
+# 都會在中途呼叫 st.rerun()。st.rerun() 會中止該輪腳本,widget 因此沒有被渲染,
+# Streamlit 隨即回收它們的狀態——下一輪就退回預設值,使用者的編輯直接消失。
+# 所以真值存在 KEPT_ 前綴的一般 key(不受 widget 回收影響),widget 只負責顯示與
+# 收集輸入,改動時用 on_change 同步回持久副本。
+PROMPT_DEFAULTS = {
     "build_ccd_prompt_edit": core.BUILD_CCD_PROMPT_PSI,
     "persona_from_ccd_prompt_edit": core.PSI_PERSONA_SYSTEM_TEMPLATE,
     "persona_from_post_prompt_edit": core.PERSONA_FROM_POST_PROMPT,
 }
-for k, v in _defaults.items():
-    st.session_state.setdefault(k, v)
+KEPT = "kept_".__add__          # kept_<widget key>
+
+for k, v in PROMPT_DEFAULTS.items():
+    st.session_state.setdefault(KEPT(k), v)
+
+
+def keep_prompt(k: str):
+    """text_area 改動時,把值抄進持久副本。"""
+    st.session_state[KEPT(k)] = st.session_state[k]
+
+
+def prompt_value(k: str) -> str:
+    """build 一律讀持久副本,不讀 widget key。"""
+    return st.session_state[KEPT(k)]
 
 
 # 對話風格 + 取樣溫度控制(讓 persona 更像真人;plain + 0.9 為預設)。
@@ -202,9 +225,10 @@ def load_sample():
 
 
 def reset_prompts():
-    st.session_state.build_ccd_prompt_edit = core.BUILD_CCD_PROMPT_PSI
-    st.session_state.persona_from_ccd_prompt_edit = core.PSI_PERSONA_SYSTEM_TEMPLATE
-    st.session_state.persona_from_post_prompt_edit = core.PERSONA_FROM_POST_PROMPT
+    """持久副本回預設,並丟掉 widget 值讓 text_area 重新吃預設。"""
+    for k, v in PROMPT_DEFAULTS.items():
+        st.session_state[KEPT(k)] = v
+        st.session_state.pop(k, None)
 
 
 def clear_chat():
@@ -315,10 +339,10 @@ def render_build():
                 with st.spinner(f"Building {KEY_LABEL[kk]}…"):
                     res = core.build_persona(
                         mode, post_text,
-                        ccd_prompt=st.session_state.build_ccd_prompt_edit,
-                        persona_prompt=(st.session_state.persona_from_ccd_prompt_edit
+                        ccd_prompt=prompt_value("build_ccd_prompt_edit"),
+                        persona_prompt=(prompt_value("persona_from_ccd_prompt_edit")
                                         if mode == core.MODE_CCD
-                                        else st.session_state.persona_from_post_prompt_edit),
+                                        else prompt_value("persona_from_post_prompt_edit")),
                         style=st.session_state.build_style,
                     )
                 st.session_state.runs = {kk: {
@@ -404,15 +428,21 @@ def render_build():
     with st.expander("🧩 Edit prompts"):
         st.caption("The real templates sent to the model. Edit, then **Build** to apply. Keep each `{curly}` placeholder.")
         st.button("↩️ Reset to default", on_click=reset_prompts)
+        # widget 值可能已被上一輪的 st.rerun() 回收 → 從持久副本補回來再建立
+        for _k in PROMPT_DEFAULTS:
+            st.session_state.setdefault(_k, st.session_state[KEPT(_k)])
         st.text_area("① Build CCD (A) — 純 Beck Traditional CCD: `{patient_text}` "
                      "(每個欄位輸出為 plain string;無人名、無封閉集 label、無 grounding/evidence box)",
-                     key="build_ccd_prompt_edit", height=420)
+                     key="build_ccd_prompt_edit", height=420,
+                     on_change=keep_prompt, args=("build_ccd_prompt_edit",))
         st.text_area("② Roleplay from CCD (A) — `{history}` `{core_belief}` "
                      "`{intermediate_belief}` `{coping_strategies}` "
                      "`{situation}` `{auto_thoughts}` `{meaning}` `{emotion}` `{behavior}` `{style_content}`",
-                     key="persona_from_ccd_prompt_edit", height=560)
+                     key="persona_from_ccd_prompt_edit", height=560,
+                     on_change=keep_prompt, args=("persona_from_ccd_prompt_edit",))
         st.text_area("③ Roleplay from post (B) — `{post_text}`, `{style_block}`",
-                     key="persona_from_post_prompt_edit", height=420)
+                     key="persona_from_post_prompt_edit", height=420,
+                     on_change=keep_prompt, args=("persona_from_post_prompt_edit",))
 
 
 # ===========================================================================
