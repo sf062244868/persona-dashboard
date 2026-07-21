@@ -33,10 +33,10 @@ fourth is inlined in a function call and is not exposed anywhere.
 
 | # | What it does | Constant | `persona_core.py` | Editable in UI |
 | --- | --- | --- | --- | --- |
-| ① | post → CCD JSON | `BUILD_CCD_PROMPT_PSI` | **172–193** | yes |
-| ② | roleplay, mode A (from CCD) | `PSI_PERSONA_SYSTEM_TEMPLATE` | **267–291** | yes |
+| ① | post → CCD JSON | `BUILD_CCD_PROMPT_PSI` | **138–159** | yes |
+| ② | roleplay, mode A (from CCD) | `PSI_PERSONA_SYSTEM_TEMPLATE` | **233–257** | yes |
 | ③ | roleplay, mode B (from post) | `PERSONA_FROM_POST_PROMPT` | **48–70** | yes |
-| ④ | JSON-format instruction for ① | *(none — inline literal)* | **229** | **no** |
+| ④ | JSON-format instruction for ① | *(none — inline literal)* | **195** | **no** |
 
 ④ is the system message `"You reconstruct Beck cognitive conceptualization diagrams and
 reply with a single JSON object."`, hardcoded inside the `chat.completions.create` call in
@@ -47,7 +47,7 @@ Two more blocks are prompt *fragments* rather than whole prompts:
 
 | Constant | `persona_core.py` | Injected into | Used in |
 | --- | --- | --- | --- |
-| `PSI_PATIENT_TYPES` | 252 | `{style_content}` of ② | mode A only |
+| `PSI_PATIENT_TYPES` | 218 | `{style_content}` of ② | mode A only |
 | `CONVERSATION_STYLES` | 83 | `{style_block}` of ③ | mode B only |
 
 ### Finding them in the running app
@@ -77,7 +77,7 @@ is ③'s sibling — the session key calls it `persona_from_ccd`, which is the c
 Other collisions worth knowing about:
 
 - **Two style dictionaries with identical keys.** `CONVERSATION_STYLES` (`:83`) and
-  `PSI_PATIENT_TYPES` (`:252`) both have `plain / upset / verbose / reserved / tangent /
+  `PSI_PATIENT_TYPES` (`:218`) both have `plain / upset / verbose / reserved / tangent /
   pleasing`. The dropdown is built from the first (`persona_dashboard.py:156`), but in mode
   A the text that reaches the model comes from the second. So the menu is *labelled* by one
   dict and *honoured* by the other, depending on mode.
@@ -97,12 +97,12 @@ Mode A, post → reply:
 
 ```
 persona_dashboard.render_build()          dashboard:316   collects post + mode + style
-  └ core.build_persona(MODE_CCD, ...)     core:567
-      ├ generate_ccd_psi()                core:207        API call #1 — prompts ① + ④
-      │   └ _ccd_psi_prompt()             core:196        substitutes {patient_text}
-      ├ cm_to_text()                      core:407        dict → the 9 cells the UI shows
-      └ psi_persona_system()              core:510        fills ② from the CCD + PSI_PATIENT_TYPES
-  └ core.chat_once(...)                   core:606        API call #2, once per turn
+  └ core.build_persona(MODE_CCD, ...)     core:431
+      ├ generate_ccd_psi()                core:173        API call #1 — prompts ① + ④
+      │   └ _ccd_psi_prompt()             core:162        substitutes {patient_text}
+      ├ cm_to_text()                      core:347        dict → the 9 cells the UI shows
+      └ psi_persona_system()              core:374        fills ② from the CCD + PSI_PATIENT_TYPES
+  └ core.chat_once(...)                   core:470        API call #2, once per turn
 ```
 
 Mode B skips `generate_ccd_psi` and `psi_persona_system`; `build_persona` formats ③
@@ -131,16 +131,18 @@ Two conventions the prompt enforces: fields the post does not support are filled
 `insufficient information`, and uncertain inferences end with `?`.
 
 The format carries no closed-set labels, no `{"text", "grounding", "evidence"}` boxes, and
-no name field — personas are identified by `post_id`. `cm_to_text()` (`core:407`) flattens
+no name field — personas are identified by `post_id`. `cm_to_text()` (`core:347`) flattens
 the five fields into the nine cells shown under **CCD profile**.
 
-## Legacy code kept on purpose
+## Backward compatibility
 
-- `grounding_report()` (`core:458`) audits `{text, grounding, evidence}` boxes. The current
-  CCD format has no such boxes, so it reports 0/0 on anything generated today. It is kept
-  only so previously cached CCDs remain auditable.
-- The closed-set machinery — `PSI_CORE_BELIEFS` (`:127`), `PSI_CORE_BELIEF_LABELS` (`:143`),
-  `PSI_EMOTIONS` (`:146`), `_core_belief_labels()` (`:321`), `_emotion_labels()` (`:337`),
-  `_dual_line()` (`:363`) — belongs to an earlier CCD format that used closed-set labels.
-  The current format is plain strings throughout, so these are only reachable through
-  backward-compatibility branches.
+`persona_core` has seen three CCD shapes: the current plain strings, an intermediate
+dual-field form (`{verbatim, label}`), and a `{text, grounding, evidence}` box form. The
+accessors that absorb all three — `_is_box()`, `_box_display()`, `_box_text()`,
+`_core_belief_text()`, `_emotion_text()` — are still live, so a CCD cached under an older
+format still renders.
+
+What the closed-set era left behind has been removed: the 19 core-belief labels, the 9
+emotion categories, and `grounding_report()`, which audited evidence boxes the current
+prompt does not emit and so scored 0/0 on everything generated today. The closed-set lists
+now live in `experiments/test_3posts.py`, the only thing that still checks against them.

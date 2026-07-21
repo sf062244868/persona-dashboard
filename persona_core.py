@@ -114,7 +114,6 @@ def style_block(style: str = DEFAULT_STYLE) -> str:
 # Patient-Ψ 重現(EMNLP 2024, arXiv 2405.19660)
 # ---------------------------------------------------------------------------
 # 逐字移植自官方 repo(github.com/ruiyiw/patient-psi,Apache-2.0/MIT):
-#   - 封閉集:core beliefs(3 類/19 細項)、emotions(9 類)
 #   - CCD 8/9 元件 schema(python/generation/generation_template.py)
 #   - 六風格 prompt(app/api/data/patient-types.jsx)
 #   - 病人角色扮演 system prompt(app/api/getDataFromKV.ts:formatPromptString)
@@ -122,39 +121,6 @@ def style_block(style: str = DEFAULT_STYLE) -> str:
 # 這一段是「忠實重現」用,做基礎線與自動評測;上面那段是 Week4 人性化探索用。
 # 官方素材存證見 meetings/2026-07-07-week4/patient_psi_ref/。
 # ===========================================================================
-
-# --- 封閉集(core-beliefs.tsx / emotions.tsx)------------------------------
-PSI_CORE_BELIEFS = {
-    "helpless": [
-        "I am incompetent.", "I am helpless.", "I am powerless, weak, vulnerable.",
-        "I am a victim.", "I am needy.", "I am trapped.", "I am out of control.",
-        "I am a failure, loser.", "I am defective.",
-    ],
-    "unlovable": [
-        "I am unlovable.", "I am unattractive.", "I am undesirable, unwanted.",
-        "I am bound to be rejected.", "I am bound to be abandoned.", "I am bound to be alone.",
-    ],
-    "worthless": [
-        "I am worthless, waste.", "I am immoral.",
-        "I am bad - dangerous, toxic, evil.", "I don't deserve to live.",
-    ],
-}
-# 展平的 19 個 core-belief 標籤(給封閉集分類/F1 用)。
-PSI_CORE_BELIEF_LABELS = [b for items in PSI_CORE_BELIEFS.values() for b in items]
-
-# 9 個情緒類別(每項是同義詞群;分類時以整個 label 為一類)。
-PSI_EMOTIONS = [
-    "anxious, worried, fearful, scared, tense",
-    "sad, down, lonely, unhappy",
-    "angry, mad, irritated, annoyed",
-    "ashamed, embarrassed, humiliated",
-    "disappointed",
-    "jealous, envious",
-    "guilty",
-    "hurt",
-    "suspicious",
-]
-
 
 # --- CCD 生成(純 Beck Traditional CCD;全欄位 plain string、不含人名)------------------
 # 刻意的設計決定(勿回退):
@@ -166,8 +132,8 @@ PSI_EMOTIONS = [
 #     模板(見 PSI_PERSONA_SYSTEM_TEMPLATE)。
 #     理由:名字不是 Beck CCD 的一格,也不存在於 post 裡——要模型生名字等於要它編造資料,
 #     實測會塌到單一預設值(連續兩篇都取 "Alex"),或把整段 TEXT 當成名字灌進 roleplay prompt。
-#   - 連帶影響:grounding_report 對本版輸出不適用(無 evidence box)→ demo 顯示 N/A。
-#     grounding_report 與 box 形存取器全部保留,舊的 box 形快取 CCD 仍可稽核/顯示。
+#   - box 形存取器(_is_box / _box_display)保留,舊格式快取 CCD 仍能顯示;
+#     稽核用的 grounding_report 已移除——本版無 evidence box,它對任何輸出都回 0/0。
 #   - bottom-up 產生順序(situations → beliefs);不支援的欄位填 "insufficient information"。
 BUILD_CCD_PROMPT_PSI = """From the TEXT below, identify the writer's automatic thoughts, emotions, behaviors, and the beliefs behind them, using only what the TEXT states. Treat every entry as a working hypothesis; mark uncertain ones with "?".
 
@@ -318,28 +284,12 @@ def _core_belief_text(cm: dict) -> str:
     return _as_text(cm.get("core_beliefs") or cb)
 
 
-def _core_belief_labels(cm: dict):
-    """核心信念的封閉集 label(供 F1);新形取 label,舊形退回 core_beliefs。"""
-    cb = cm.get("core_belief")
-    if isinstance(cb, dict):
-        return cb.get("label")
-    return cm.get("core_beliefs") or cb
-
-
 def _emotion_text(m: dict) -> str:
     """單一 cognitive model 的情緒「本人原話」;box 取 text,dual-field 取 verbatim,舊形退回 emotion。"""
     emo = m.get("emotion")
     if isinstance(emo, dict):
         return _as_text(emo.get("text") or emo.get("verbatim") or emo.get("label"))
     return _as_text(emo)
-
-
-def _emotion_labels(m: dict):
-    """單一 cognitive model 的情緒封閉集 label(供 F1);新形取 label,舊形退回 emotion。"""
-    emo = m.get("emotion")
-    if isinstance(emo, dict):
-        return emo.get("label")
-    return emo
 
 
 def _cognitive_models(cm: dict) -> list:
@@ -358,13 +308,6 @@ def _cognitive_models(cm: dict) -> list:
         "emotion": cm.get("emotion"),
         "behavior": cm.get("behavior"),
     }]
-
-
-def _dual_line(text: str, label) -> str:
-    """dual-field 顯示:本人原話為主,封閉集 label 以中括號附註(供對照/評分)。"""
-    text = text or "(none)"
-    lab = _as_text(label)
-    return f"{text}  [closed-set: {lab}]" if lab else text
 
 
 def _is_box(v) -> bool:
@@ -386,22 +329,19 @@ def _core_belief_display(cm: dict) -> str:
     cb = cm.get("core_belief")
     if _is_box(cb):
         return _box_display(cb)
-    # 純字串版(beck-pure-string-v4):值本身就是全部內容,沒有封閉集 label 可附註。
-    # 若不擋掉,_dual_line 會拿同一個字串同時當 text 與 label,印出
-    # 「I am alone  [closed-set: I am alone]」這種假 label。
+    # 純字串版(beck-pure-string-v4):值本身就是全部內容。
     if isinstance(cb, str):
         return cb.strip() or "(none)"
-    return _dual_line(_core_belief_text(cm), _core_belief_labels(cm))
+    return _core_belief_text(cm) or "(none)"
 
 
 def _emotion_display(m: dict) -> str:
     emo = m.get("emotion")
     if _is_box(emo):
         return _box_display(emo)
-    # 同上:純字串情緒不附封閉集 label。
     if isinstance(emo, str):
         return emo.strip() or "(none)"
-    return _dual_line(_emotion_text(m), _emotion_labels(m))
+    return _emotion_text(m) or "(none)"
 
 
 def cm_to_text(cm: dict) -> str:
@@ -429,82 +369,6 @@ def cm_to_text(cm: dict) -> str:
     return "\n".join(lines)
 
 
-# --- grounding 稽核(零 API):比對 Stage-1 CCD 每個 box 是否貼合原 post -----------------
-_CCD_BOX_KEYS_TOP = ["life_history", "core_belief", "intermediate_beliefs", "coping_strategies"]
-_CCD_BOX_KEYS_CM = ["situation", "automatic_thoughts", "meaning_of_automatic_thought",
-                    "emotion", "behavior"]
-
-
-def _iter_boxes(cm: dict):
-    """走訪 CCD 內所有 Stage-1 box,yield (欄位名, box)。非 box 形(dual-field/舊)自動略過。"""
-    for k in _CCD_BOX_KEYS_TOP:
-        if _is_box(cm.get(k)):
-            yield k, cm[k]
-    for i, m in enumerate(cm.get("cognitive_models") or []):
-        if not isinstance(m, dict):
-            continue
-        for k in _CCD_BOX_KEYS_CM:
-            if _is_box(m.get(k)):
-                yield f"cognitive_models[{i}].{k}", m[k]
-
-
-def _norm_q(s: str) -> str:
-    """near-verbatim 用的正規化:casefold + 收斂空白 + 去頭尾與結尾標點。
-    用來區分「模型憑空捏造」與「只是大小寫/標點/空白微調的同一句引文」。"""
-    s = " ".join(str(s or "").split()).casefold()
-    return s.strip(" .,!?;:“”\"'")
-
-
-def grounding_report(cm: dict, post_text: str) -> dict:
-    """零 API 對照 CCD↔origin post(回應 advisor「compare your CCD with the origin post」):
-      - stated 格:evidence 是否為 post 的引文。分兩級:
-          * exact  = 逐字精確子字串(最嚴格);
-          * near   = 正規化後(去大小寫/標點/空白)仍能對上 → 近似逐字(非捏造,只是微調)。
-        兩者都對不上才算「fabricated(憑空)」。
-      - inferred 格:box text 應以 '?' 標記(worksheet 要求)。
-      - insufficient 格:text 以 'insufficient' 開頭 / grounding 為 null,單獨計。
-    回傳 {"summary": {...}, "rows": [...]};summary 可直接印給 advisor。
-    """
-    post_norm = _norm_q(post_text)
-    rows = []
-    for name, b in _iter_boxes(cm):
-        text = _as_text(b.get("text"))
-        ev = b.get("evidence") or []
-        if isinstance(ev, str):
-            ev = [ev]
-        g = b.get("grounding")
-        near = None
-        fabricated = []
-        if text.strip().lower().startswith("insufficient") or g is None:
-            status, ok = "insufficient", None
-        elif g == "stated":
-            status = "stated"
-            ok = bool(ev) and all(str(q) in post_text for q in ev)          # 逐字精確
-            near = bool(ev) and all(_norm_q(q) in post_norm for q in ev)     # 近似逐字
-            fabricated = [str(q) for q in ev if _norm_q(q) not in post_norm]  # 兩級都對不上=憑空
-        elif g == "inferred":
-            status = "inferred"
-            ok = text.rstrip().endswith("?")
-        else:
-            status, ok = str(g), None
-        rows.append({
-            "box": name, "grounding": status, "ok": ok, "near": near, "n_evidence": len(ev),
-            # bad_evidence 只留「連近似都對不上」的,才是真正憑空;大小寫/標點微調不算。
-            "bad_evidence": fabricated,
-        })
-    stated = [r for r in rows if r["grounding"] == "stated"]
-    inferred = [r for r in rows if r["grounding"] == "inferred"]
-    summary = {
-        "n_boxes": len(rows),
-        "stated_total": len(stated),
-        "stated_pass": sum(1 for r in stated if r["ok"]),          # 逐字精確
-        "stated_near": sum(1 for r in stated if r["near"]),        # 逐字或近似(可回溯原文)
-        "stated_fabricated": sum(1 for r in stated if r["bad_evidence"]),  # 憑空
-        "inferred_total": len(inferred),
-        "inferred_marked": sum(1 for r in inferred if r["ok"]),
-        "insufficient": sum(1 for r in rows if r["grounding"] == "insufficient"),
-    }
-    return {"summary": summary, "rows": rows}
 
 
 def psi_persona_system(cm: dict, style: str = "plain",
