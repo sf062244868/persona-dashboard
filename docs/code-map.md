@@ -4,6 +4,28 @@ Where things live, and why some names look like duplicates of each other.
 
 Line numbers refer to the current `main`.
 
+## Layout
+
+```
+persona_dashboard.py    Streamlit UI, and the entry point
+persona_core.py         Prompts, CCD generation, persona assembly, chat
+ui_common.py            Key injection and password gate
+
+posts/                  16 sample posts, listed in index.json
+patients_ccd/           CCDs written at runtime (gitignored)
+docs/                   this file, pipeline.md, DEPLOY.md
+```
+
+These three modules stay at the repository root. `persona_dashboard.py` imports
+`persona_core` as a bare module and resolves `posts/` relative to its own directory, and
+Streamlit Cloud pins the main file path to the root. Moving them breaks imports and the
+deployment together.
+
+`ui_common` is imported before `persona_core` on purpose: it copies `OPENAI_API_KEY` out
+of `st.secrets` into `os.environ`, which is the only way the key reaches `persona_core` on
+Streamlit Cloud (there is no `.env` there), and it runs the password gate before the
+backend loads.
+
 ## The prompts
 
 Four prompt texts reach the model. Three are named constants you can edit in the UI; the

@@ -51,23 +51,6 @@ Available while chatting:
 - **Export** — download the transcript
 - Token count and cost per call
 
-## Repository layout
-
-```
-persona_dashboard.py    Streamlit UI
-persona_core.py         Prompts, CCD generation, persona assembly, chat
-ui_common.py            Key injection and password gate
-
-posts/                  16 sample posts, listed in index.json
-patients_ccd/           CCDs written at runtime (gitignored)
-docs/                   code-map.md, pipeline.md, DEPLOY.md
-```
-
-Keep the entry points at the repository root. `persona_dashboard.py` imports
-`persona_core` as a bare module, resolves `posts/` relative to its own directory, and
-Streamlit Cloud pins the main file path to the root. Moving these files breaks imports
-and the deployment together.
-
 ## More
 
 - [docs/code-map.md](docs/code-map.md) — where the prompts live, and why some names repeat
