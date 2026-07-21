@@ -112,7 +112,7 @@ Sample posts do **not** go through `persona_core`. `load_sample_posts()`
 
 ## The CCD format
 
-Prompt ① is stamped `beck-pure-string-v4` and is called with `model=gpt-4o`,
+Prompt ① is stamped `beck-pure-string-v5` and is called with `model=gpt-4o`,
 `response_format={"type": "json_object"}`, `max_tokens=1500`. It returns five fields, all
 plain strings:
 

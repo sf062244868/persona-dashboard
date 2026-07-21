@@ -134,7 +134,7 @@ BUILD_CCD_PROMPT_PSI = """From the TEXT below, identify the writer's automatic t
 
 Start from the situations, then work up to the beliefs.
 
-For each of 1–3 problematic situations in the TEXT:
+For each problematic situation in the TEXT, up to 3. Prefer 3 when the TEXT describes that many; do not invent situations the TEXT does not describe.
 - situation: What was the problematic situation?
 - automatic_thoughts: What went through their mind?
 - meaning_of_automatic_thought: What did that automatic thought mean to them?
@@ -147,7 +147,7 @@ Across those situations:
 - intermediate_beliefs: Which assumptions, rules and beliefs help them cope with the core belief?
 - coping_strategies: Which patterns of dysfunctional behaviors do they use to cope with the belief?
 
-Return a JSON object with these keys in order: "life_history", "core_belief", "intermediate_beliefs", "coping_strategies", "cognitive_models" (array of 1–3 objects with keys in order: situation, automatic_thoughts, meaning_of_automatic_thought, emotion, behavior). Each value is a string. If the TEXT does not support a field, use "insufficient information".
+Return a JSON object with these keys in order: "life_history", "core_belief", "intermediate_beliefs", "coping_strategies", "cognitive_models" (array of up to 3 objects, as many as the TEXT supports, with keys in order: situation, automatic_thoughts, meaning_of_automatic_thought, emotion, behavior). Each value is a string. If the TEXT does not support a field, use "insufficient information".
 
 TEXT:
 {patient_text}
@@ -201,7 +201,7 @@ def generate_ccd_psi(post_text: str, ccd_prompt: str = None):
         cm.pop("name", None)
         # 標記 prompt 版本:存進 patients_ccd/ 的 CCD 會跨越 prompt 改版而留存,
         # 沒有這個戳記就無法分辨一份快取是哪一版產生的。
-        cm.setdefault("prompt_version", "beck-pure-string-v4")
+        cm.setdefault("prompt_version", "beck-pure-string-v5")
     _ccd_psi_cache[key] = cm
     return cm, {"latency": latency, "cached": False, **_token_usage(response)}
 
@@ -319,7 +319,7 @@ def _core_belief_display(cm: dict) -> str:
     cb = cm.get("core_belief")
     if _is_box(cb):
         return _box_display(cb)
-    # 純字串版(beck-pure-string-v4):值本身就是全部內容。
+    # 純字串版:值本身就是全部內容。
     if isinstance(cb, str):
         return cb.strip() or "(none)"
     return _core_belief_text(cm) or "(none)"
