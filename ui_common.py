@@ -2,7 +2,7 @@
 ui_common.py — Streamlit 共用啟動邏輯(金鑰注入 + 密碼)
 =====================================================
 
-persona_dashboard.py(Build 工具)與 pages/(Persona Library)共用,避免重複。
+由 persona_dashboard.py 在最上面 import,必須早於 persona_core。
 """
 
 import os
@@ -12,11 +12,10 @@ import streamlit as st
 from dotenv import load_dotenv
 
 # Load .env BEFORE any check_password()/ensure_openai_key() so APP_PASSWORD and
-# OPENAI_API_KEY from shared/.env are visible at startup (persona_core also loads
-# these later, but the password gate runs first).
+# OPENAI_API_KEY are visible at startup (persona_core also loads .env later, but
+# the password gate runs first).
 _HERE = Path(__file__).resolve().parent
 load_dotenv(_HERE / ".env")
-load_dotenv(_HERE.parent.parent / "shared" / ".env")
 
 
 def secret(key, default=None):

@@ -57,19 +57,19 @@ Available while chatting:
 persona_dashboard.py    Streamlit UI
 persona_core.py         Prompts, CCD generation, persona assembly, chat
 ui_common.py            Key injection and password gate
-demo_ccd_max.py         Single-post walkthrough script
 
 posts/                  16 sample posts, listed in index.json
 patients_ccd/           CCDs written at runtime (gitignored)
-docs/                   pipeline.md, DEPLOY.md
+docs/                   code-map.md, pipeline.md, DEPLOY.md
 ```
 
 Keep the entry points at the repository root. `persona_dashboard.py` imports
-`persona_core` as a bare module, `persona_core` resolves `posts/` relative to its own
-directory, and Streamlit Cloud pins the main file path to the root. Moving these files
-breaks imports and the deployment together.
+`persona_core` as a bare module, resolves `posts/` relative to its own directory, and
+Streamlit Cloud pins the main file path to the root. Moving these files breaks imports
+and the deployment together.
 
 ## More
 
+- [docs/code-map.md](docs/code-map.md) — where the prompts live, and why some names repeat
 - [docs/pipeline.md](docs/pipeline.md) — what each mode calls
 - [docs/DEPLOY.md](docs/DEPLOY.md) — deployment

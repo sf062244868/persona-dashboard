@@ -2,11 +2,11 @@
 persona_core.py — 共用後端(無 Streamlit 依賴)
 ================================================
 
-Prompts、post 資料、cluster 接口、CCD 生成、單輪對話。
+Prompts、CCD 生成、persona 組裝、單輪對話。
 給 persona_dashboard.py(與任何 UI)共用,UI 只負責畫面。
 
-cluster 分群與 post 全文「之後再接你們的研究方法」:只改 load_clusters() /
-load_post_text() 即可,其餘不動。
+三份 prompt 與它們在 UI 上的對應,見 docs/code-map.md。
+範例 post 由 persona_dashboard.load_sample_posts() 讀 posts/index.json,不經過本檔。
 """
 
 import os
@@ -19,9 +19,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 HERE = Path(__file__).resolve().parent
-SHARED = HERE.parent.parent / "shared"   # 整理後：repo 根目錄下的共用資料夾
 load_dotenv(HERE / ".env")
-load_dotenv(SHARED / ".env")
 
 # 延遲建立 client:本地用 .env、雲端用平台 secrets(由 UI 注入 os.environ)。
 _client = None
@@ -37,7 +35,6 @@ def get_client() -> OpenAI:
 
 MODEL = "gpt-4o"
 CCD_DIR = HERE / "patients_ccd"
-POSTS_DIR = HERE / "posts"
 
 # 兩種模式的標準名稱
 MODE_CCD = "Post-CCD-Chatbox"
@@ -543,103 +540,6 @@ def psi_persona_system(cm: dict, style: str = "plain",
         # 官方 formatPromptString:plain 對應空字串(guideline 1 留空),忠實照 paper。
         style_content=style_content,
     )
-
-
-
-
-# ---------------------------------------------------------------------------
-# Post 資料 + cluster / 全文接口
-# ---------------------------------------------------------------------------
-
-# 來自 Merged_Post_List.md 的 8 個人工 category 與 20 篇 post。
-# ⚠️ flagged=True 的 post(含危機內容)沿用上次規則,排除於 persona 使用。
-POST_CATALOG = [
-    {"id": 1, "category": "Relationship", "title": "Anxious attachment & text messaging",
-     "summary": "Loves getting texts from his girlfriend, but when she takes an hour+ to reply he feels anxious; knows space is healthy but can't stop the negative thoughts.",
-     "url": "https://www.reddit.com/r/dating/comments/1ric0tv/anxious_attachment_and_text_messaging", "flagged": False},
-    {"id": 2, "category": "Relationship", "title": "What do you do so you don't constantly seek reassurance",
-     "summary": "First disagreement came when partner pulled away under work stress; she kept asking 'are we ok?' and he said the reassurance-seeking turned him off. Asks how to stop.",
-     "url": "https://www.reddit.com/r/datingoverthirty/comments/1enhztd/what_do_you_do_so_you_dont_constantly_seek", "flagged": False},
-    {"id": 3, "category": "Relationship", "title": "Do I tell a girl that her man sent dick pics to me?",
-     "summary": "A 24F casually dated a 27M who committed to another woman, then sent her an unsolicited pic; she debates whether to warn his girlfriend.",
-     "url": "https://www.reddit.com/r/relationships/comments/rpvh7t/do_i_tell_a_girl_who_i_dont_really_know_that_her/", "flagged": False},
-    {"id": 4, "category": "Relationship", "title": "My girlfriend doesn't respect my time when I'm working",
-     "summary": "A 24M WFH in IT fought with his 20F girlfriend after not replying for ~2h during an 8h shift; feels she wants constant validation, asks how to stop recurring arguments.",
-     "url": "https://www.reddit.com/r/relationship_advice/comments/1koutfw/my_24m_girlfriend_20f_doesnt_respect_my_time_when/", "flagged": False},
-    {"id": 5, "category": "Family", "title": "Why is it never enough",
-     "summary": "A minor despairs at never being good enough for their parents. Contains ACTIVE SUICIDAL IDEATION — safety-flagged, excluded from persona use.",
-     "url": "https://www.reddit.com/r/raisedbynarcissists/comments/17pb4f8/why_is_it_never_enough", "flagged": True},
-    {"id": 6, "category": "Family", "title": "I was the perfect kid but even that wasn't enough",
-     "summary": "Lifelong account of trying to earn parents' affection (grades, obedience) yet never made them proud; relatives sided with the parents.",
-     "url": "https://www.reddit.com/r/raisedbynarcissists/comments/11eyb68/i_was_the_perfect_kid_but_even_that_wasnt_enough", "flagged": False},
-    {"id": 7, "category": "Family", "title": "My dad used my birthday dinner to tell me what my problem is",
-     "summary": "A 23F, mostly estranged, was lectured for ~45 min by her dad ('you see yourself as a victim') and dreads his attending her graduation.",
-     "url": "https://www.reddit.com/r/raisedbynarcissists/comments/1kj3zo5/my_dad_used_my_birthday_dinner_to_tell_me_what_my/", "flagged": False},
-    {"id": 8, "category": "Family", "title": "I (23f) need to know that I'm not crazy",
-     "summary": "She made her mother breakfast to keep the peace; the mother threw it, broke dishes, and chased her screaming while the father watched. About to leave for med school.",
-     "url": "https://www.reddit.com/r/raisedbynarcissists/comments/1kk0gwt/i23f_need_to_know_that_im_not_crazy/", "flagged": False},
-    {"id": 9, "category": "Loneliness", "title": "I feel like literally no one knows me truly",
-     "summary": "An 18F masks her true self socially, feels permanently alone and like an outcast even when 'popular'; recent depression/anxiety diagnosis dismissed by parents.",
-     "url": "https://www.reddit.com/r/intj/comments/9rrd92/i_feel_like_literally_no_one_knows_me_truly_not", "flagged": False},
-    {"id": 10, "category": "Loneliness", "title": "Today I found out my crush had her wedding",
-     "summary": "He confessed feelings years after meeting her through volunteering, learned she was taken; today saw her wedding photos and grieves alone on his couch.",
-     "url": "https://www.reddit.com/r/ForeverAlone/comments/prnu08/today_i_found_out_my_crush_had_her_wedding/", "flagged": False},
-    {"id": 11, "category": "Addiction", "title": "Anyone else drink to shut off their brain",
-     "summary": "Functioning at work but calls himself 'a ticking time-bomb', keeps using to cope with idle free time; a ruminator and mental drifter.",
-     "url": "https://www.reddit.com/r/stopdrinking/comments/1dox2u6/anyone_else_drink_to_shut_off_their_brain", "flagged": False},
-    {"id": 12, "category": "Addiction", "title": "I was too confident and relapsed",
-     "summary": "Quit pot and wine, relapsed when a dating partner offered to smoke; within a month using every two days with all old problems back. Recommitting to quitting.",
-     "url": "https://www.reddit.com/r/leaves/comments/rp31tc/i_was_too_confident_and_relapsed_my_issues_came/", "flagged": False},
-    {"id": 13, "category": "Career", "title": "Feeling like a fraud",
-     "summary": "A ~20yr senior procrastinates then completes work in bursts; unconventional ideas earn high reviews yet he feels like a fraud vs steadier colleagues.",
-     "url": "https://www.reddit.com/r/auscorp/comments/1iow049/feeling_like_a_fraud", "flagged": False},
-    {"id": 14, "category": "Career", "title": "Told I speak 'too direct' and 'like a machine gun'",
-     "summary": "A non-native English speaker in a UK corporate role, told he's 'too direct' after a meeting; realized he's paid ~10k less than peers, asks how to respond.",
-     "url": "https://www.reddit.com/r/careerguidance/comments/1kneck7/told_i_speak_too_direct_and_like_a_machine_gun/", "flagged": False},
-    {"id": 15, "category": "Milestone", "title": "Going from being ahead to feeling behind in life",
-     "summary": "Ahead in grade school, slacked in college, a year unemployed; now in an online master's + internship feeling ~3 years delayed vs friends. Asks how to change the mindset.",
-     "url": "https://www.reddit.com/r/findapath/comments/1ttgogd/going_from_being_ahead_to_feeling_behind_in_life", "flagged": False},
-    {"id": 16, "category": "Milestone", "title": "You awaken at age 22…",
-     "summary": "On the day he should have graduated, he reflects on being academically suspended due to then-undiagnosed ADHD; friends' graduation photos bring him to tears.",
-     "url": "https://www.reddit.com/r/findapath/comments/1korjdl/you_awaken_at_age_22/", "flagged": False},
-    {"id": 17, "category": "Habit Change", "title": "Does anyone feel like getting disciplined / 'relapsed'",
-     "summary": "★ Last week's source post. Set small goals (~7 weeks ago) that worked until he stopped tracking; today stayed in bed and felt like a failure. Asks how others self-talk through a relapse.",
-     "url": "https://www.reddit.com/r/getdisciplined/comments/dshviu/needadvice_does_anyone_feel_like_getting", "flagged": False},
-    {"id": 18, "category": "Habit Change", "title": "Relapsed",
-     "summary": "Doing well across no-fap, gym, study, work until he broke a 26-day streak; traces it to a domino effect from sleeping late. Asks if a small loss can cascade.",
-     "url": "https://www.reddit.com/r/getdisciplined/comments/1kd7bi9/relapsed/", "flagged": False},
-    {"id": 19, "category": "Sleep", "title": "Anyone else feel exhausted but their mind won't switch off",
-     "summary": "His mind woke the moment he tried to sleep; what changed was realizing the pressure around sleep was the problem and he stopped forcing it. A recovery narrative.",
-     "url": "https://www.reddit.com/r/insomnia/comments/1sjdmpd/anyone_else_feel_exhausted_but_their_mind_wont/", "flagged": False},
-    {"id": 20, "category": "Sleep", "title": "Slept absolutely zero hours last night again and I feel normal",
-     "summary": "In bed at 11pm, awake until 6am for ~zero sleep yet felt oddly normal at work; a severe sleep-deprivation pattern that began with anxiety; meds haven't worked.",
-     "url": "https://www.reddit.com/r/insomnia/comments/1kq3rmk/slept_absolutely_zero_hours_last_night_again_and/", "flagged": False},
-]
-
-# id 17 的全文上次已存在共用資料夾,先映射過去;其餘等之後補進 posts/
-FULL_TEXT_PATHS = {
-    17: SHARED / "selected_post_habitchange.txt",
-}
-
-
-def load_clusters() -> dict:
-    """回傳 {cluster_name: [post, ...]}。Placeholder:用 8 個人工 category。
-    換成你們之前的研究方法時只改這裡,維持回傳格式即可。"""
-    clusters: dict = {}
-    for post in POST_CATALOG:
-        clusters.setdefault(post["category"], []).append(post)
-    return clusters
-
-
-def load_post_text(post_id: int) -> str:
-    """回傳某篇 post 全文,找不到回空字串。先找 posts/{id}.txt,再找已知上層全文。"""
-    local = POSTS_DIR / f"{post_id}.txt"
-    if local.exists():
-        return local.read_text(encoding="utf-8")
-    known = FULL_TEXT_PATHS.get(post_id)
-    if known and known.exists():
-        return known.read_text(encoding="utf-8")
-    return ""
 
 
 # ---------------------------------------------------------------------------

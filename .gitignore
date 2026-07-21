@@ -17,3 +17,4 @@ clusters/
 .devcontainer/
 requirements-dev.txt
 posts/17.txt
+demo_ccd_max.py

@@ -85,7 +85,7 @@ PIPELINE_HTML = """
   <div class="pp-panel a">
     <div class="pp-title a"><span class="tag">A</span>Post-CCD-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_post_text()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_sample_posts()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node ccd"><b>CCD</b><small>Patient-Ψ</small><small class="call">gpt-4o<br>generate_ccd_psi()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node persona"><b>Persona</b><small>from CCD</small><small class="call">build_persona()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node chat"><b>Chatbox</b><small>chat</small><small class="call">gpt-4o<br>chat_once()</small></div>
@@ -95,7 +95,7 @@ PIPELINE_HTML = """
   <div class="pp-panel b">
     <div class="pp-title b"><span class="tag">B</span>Direct Post-Chatbox</div>
     <div class="pp-flow">
-      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_post_text()</small></div><div class="pp-arrow">→</div>
+      <div class="pp-node post"><b>Post</b><small>raw post</small><small class="call">load_sample_posts()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node persona"><b>Persona</b><small>from post</small><small class="call">build_persona()</small></div><div class="pp-arrow">→</div>
       <div class="pp-node chat"><b>Chatbox</b><small>chat</small><small class="call">gpt-4o<br>chat_once()</small></div>
     </div>
@@ -108,11 +108,17 @@ PIPELINE_HTML = """
 # ===========================================================================
 # shared helpers
 # ===========================================================================
-PRICE_IN, PRICE_OUT = 2.50, 10.00
+# USD per 1M tokens, (input, output). Unknown models fall back to gpt-4o.
+PRICES = {
+    "gpt-4o": (2.50, 10.00),
+    "gpt-4o-mini": (0.15, 0.60),
+}
+PRICE_IN, PRICE_OUT = PRICES["gpt-4o"]
 
 
-def _cost(prompt_tokens, completion_tokens) -> float:
-    return ((prompt_tokens or 0) * PRICE_IN + (completion_tokens or 0) * PRICE_OUT) / 1_000_000
+def _cost(prompt_tokens, completion_tokens, model=None) -> float:
+    price_in, price_out = PRICES.get(model, (PRICE_IN, PRICE_OUT))
+    return ((prompt_tokens or 0) * price_in + (completion_tokens or 0) * price_out) / 1_000_000
 
 
 def _meta_chips(info: dict) -> list:
@@ -123,7 +129,9 @@ def _meta_chips(info: dict) -> list:
         bits.append(f"⏱ {info['latency']:.1f}s")
     if info.get("total_tokens"):
         bits.append(f"🔢 {info['total_tokens']} tok")
-        bits.append(f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens')):.4f}")
+        bits.append(
+            f"~${_cost(info.get('prompt_tokens'), info.get('completion_tokens'), info.get('model')):.4f}"
+        )
     return bits
 
 
